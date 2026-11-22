@@ -3,3 +3,8 @@ dist/
 .DS_Store
 *.log
 test-results/
+
+# chaves locais (nunca versionar)
+.env
+.env.local
+.env.*.local

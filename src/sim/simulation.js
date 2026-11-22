@@ -139,20 +139,21 @@ export class Simulation {
     this.city.flash = flash * 0.9;
     this.debris.flash = flash * 0.9;
     this.dust.flash = flash;
-    this.flashEl.style.opacity = String(this.opts.reduceFlash ? flash * 0.35 : flash);
+    this.flashEl.style.opacity = this.cinemaActive ? '0' : String(this.opts.reduceFlash ? flash * 0.35 : flash);
 
-    // som e tremor quando a frente alcança o centro da tela ("posição da câmera")
-    const dc = haversineKm(this.map.getCenter(), this.gz);
+    // som e tremor quando a frente alcança a câmera (centro da tela no mapa, ou a câmera do modo cinema)
+    const dc = this.cinemaActive && this.cinema ? this.cinema.cameraDistKm() : haversineKm(this.map.getCenter(), this.gz);
     if (!this.soundPlayed && tau >= fx.arrivalAt(dc) / this.accel) {
       this.soundPlayed = true;
       const psiC = fx.psiAt(dc);
       const inten = clamp(Math.log10(psiC + 1) / 1.5, 0.12, 1);
       if (this.opts.sound) playBlast(inten, this.accel > 5 ? 0.7 : 1);
-      if (psiC > 0.3) this.shake(inten);
+      if (psiC > 0.3 && !this.cinemaActive) this.shake(inten);
     }
 
     this.updateHud(tau, tPhys, front, dc);
-    this.map.triggerRepaint();
+    this.scene.active = !this.cinemaActive;
+    if (!this.cinemaActive) this.map.triggerRepaint();
     if (tau > 240) {
       this.running = false;
       this.scene.active = false;

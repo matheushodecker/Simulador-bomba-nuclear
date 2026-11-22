@@ -20,6 +20,10 @@ import { GroundEffects } from './render/ground.js';
 import { Simulation } from './sim/simulation.js';
 import { setSoundEnabled } from './sim/audio.js';
 import { createApp } from './app.js';
+import { CinemaView } from './cinema/CinemaView.js';
+import { initCinemaControls } from './ui/cinemaControls.js';
+import { computeEffects } from './physics/effects.js';
+import { simParams } from './state.js';
 import { initControls } from './ui/controls.js';
 import { initResults } from './ui/results.js';
 import { initToasts } from './ui/toast.js';
@@ -80,10 +84,20 @@ const sim = new Simulation({
   flashEl: document.getElementById('flash'),
   shakeEl: document.getElementById('map-wrap'),
 });
-const app = createApp({ mapView, layers, scene, city, sim });
+const cinema = new CinemaView({ host: document.getElementById('cinema'), sim, state });
+sim.cinema = cinema;
+cinema.previewFx = () => computeEffects(simParams());
+const app = createApp({ mapView, layers, scene, city, sim, cinema });
+on('sim:start', (d) => { if (cinema.active) cinema.onDetonate(d); });
+on('cleared', () => cinema.onClear());
+on('gz-changed', (gz) => { if (cinema.active) cinema.setOrigin(gz); });
+on('buildings-loaded', ({ list }) => cinema.setBuildings(list));
+on('cinema-pick', (ll) => app.setGZ(ll));
+on('tint-changed', () => { if (cinema.city) cinema.city.tint = state.tint ? 0.85 : 0; });
 const controls = initControls(app, mapView);
 const results = initResults({ layers, city, sim });
 results.registerObjects({ city, debris, dust, smoke, fire, fireball, mushroom, shock, ground });
+initCinemaControls({ cinema, mapView });
 
 /* ---------- páginas ---------- */
 const ctx = { app, controls, showView };
@@ -103,4 +117,4 @@ if (!load('seenMenu', false)) {
 }
 
 // atalho de depuração no console
-window.__sim = { state, app, sim, map, city, scene };
+window.__sim = { state, app, sim, map, city, scene, cinema };

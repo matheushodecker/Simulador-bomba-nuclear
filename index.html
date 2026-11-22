@@ -33,6 +33,17 @@
     <!-- ======================= SIMULADOR ======================= -->
     <section id="view-sim" class="view active" aria-label="Simulador">
       <div id="map-wrap"><div id="map"></div></div>
+      <div id="cinema" class="cinema" hidden aria-label="Modo cinema 3D">
+        <div class="cinema-stage"></div>
+        <div class="cinema-status" hidden></div>
+        <div class="cinema-help">Arraste: mover · Botão direito ou Ctrl+arrastar: girar · Roda: zoom · Clique: alvo / inspecionar</div>
+        <div class="cinema-attrib"></div>
+        <div class="cinema-info inspect" hidden></div>
+      </div>
+      <div class="view-switch" role="group" aria-label="Tipo de visualização">
+        <button id="vs-map" class="active">🗺️ Mapa</button>
+        <button id="vs-cinema">🎬 Cinema 3D</button>
+      </div>
       <div id="flash" aria-hidden="true"></div>
       <div id="hud" hidden aria-live="polite"></div>
       <div id="click-hint" class="click-hint"></div>
@@ -129,6 +140,30 @@
             </div>
             <button id="wind-fetch" class="btn wide">🌐 Usar vento atual (Open-Meteo)</button>
             <div id="wind-status" class="muted small"></div>
+          </details>
+
+          <details class="sec" open id="sec-cinema">
+            <summary>🎬 Modo cinema (fotorrealista)</summary>
+            <button id="cinema-toggle" class="btn primary wide">🎬 Entrar no modo cinema</button>
+            <div class="row"><span class="lbl">Cidades 3D:</span>
+              <select id="cinema-provider" class="wide">
+                <option value="google">Google Photorealistic 3D Tiles</option>
+                <option value="cesium">Cesium ion (Google 3D Tiles)</option>
+                <option value="none">Sem chave — satélite + prédios OSM</option>
+              </select>
+            </div>
+            <div class="row" id="cinema-key-row">
+              <input id="cinema-key" type="password" placeholder="Cole sua chave aqui" autocomplete="off" spellcheck="false" />
+              <button id="cinema-key-save" class="btn">Usar</button>
+            </div>
+            <p id="cinema-key-help" class="muted small"></p>
+            <div class="row"><span class="lbl">Hora do dia:</span>
+              <select id="cinema-time">
+                <option value="dia">Dia</option>
+                <option value="tarde">Fim de tarde</option>
+                <option value="noite">Noite</option>
+              </select>
+            </div>
           </details>
 
           <details class="sec">

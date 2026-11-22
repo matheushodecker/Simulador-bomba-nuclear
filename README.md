@@ -31,6 +31,35 @@ OpenStreetMap são renderizados em 3D e **destruídos em tempo (acelerado) real*
   física dos efeitos, leis de escala com gráficos interativos), *Validação* (modelo × referências publicadas e
   Hiroshima/Nagasaki, com erro percentual e limitações) e *Fontes*.
 
+## 🎬 Modo cinema (fotorrealista)
+
+Botão **🎬 Cinema 3D** no topo do mapa. É um motor 3D próprio (three.js + pós-processamento HDR):
+
+- **Cidades fotorrealistas reais**: Google Photorealistic 3D Tiles (a malha 3D do Google Earth), direto da Google ou via Cesium ion.
+- **Iluminação de cinema**: céu físico, neblina atmosférica, hora do dia (dia, fim de tarde, noite), tone mapping ACES, bloom, grão de filme, vinheta, oclusão de ambiente (qualidade alta).
+- **Bola de fogo e cogumelo volumétricos** (raymarching com ruído Perlin-Worley, auto-sombreamento, emissão de corpo negro, fuligem), com a saia de poeira nas explosões no solo.
+- **Luz da bola de fogo com sombras** sobre a cidade, clarão, refração da onda de choque e nuvem de condensação.
+- **Destruição na GPU** da malha fotogramétrica: o que está acima do chão desaba conforme a onda chega, fachadas carbonizam, focos de incêndio, destroços em voxels, poeira e fumaça.
+- **Câmera cinematográfica** que acompanha a onda e recua para enquadrar o cogumelo (qualquer clique devolve o controle).
+
+### Chave das cidades 3D
+
+Sem chave, o modo cinema usa **imagem de satélite + prédios do OpenStreetMap** com o mesmo motor de iluminação e efeitos.
+Para as cidades fotorrealistas, escolha uma opção em **Controles → 🎬 Modo cinema** e cole a chave:
+
+1. **Google Maps Platform** — em <https://console.cloud.google.com/>: crie um projeto, ative a **Map Tiles API** e gere uma chave
+   em *Credenciais*. Exige conta de faturamento; há cota mensal gratuita (confira os valores atuais). Restrinja a chave ao seu domínio.
+2. **Cesium ion** — conta gratuita em <https://ion.cesium.com/>, adicione o recurso **Google Photorealistic 3D Tiles** (ID 2275207)
+   no *Asset Depot* e copie um *Access Token*.
+
+A chave fica salva só no navegador (`localStorage`). Alternativamente, copie `.env.example` para `.env.local` e preencha
+`VITE_GOOGLE_TILES_KEY` ou `VITE_CESIUM_ION_TOKEN` (o arquivo é ignorado pelo git).
+
+### Desempenho
+
+O modo cinema exige placa de vídeo dedicada para as qualidades **Alta/Ultra** (nuvem volumétrica em resolução maior,
+sombras 2048–4096, oclusão de ambiente). Em notebooks e celulares use **Baixa/Média**.
+
 ## Como rodar
 
 Requer Node.js 18+.
@@ -63,6 +92,9 @@ src/
   services/                Overpass (prédios), Nominatim (busca/país), Open-Meteo (vento)
   render/                  three.js: cidade destrutível, voxels, partículas, bola de fogo,
                            cogumelo, onda de choque, efeitos no chão, ogiva estilizada (SVG)
+  cinema/                  modo cinema: CinemaView (motor), worlds (Google/Cesium/satélite+OSM),
+                           volumetric (nuvem por raymarching), destruction (shader da malha),
+                           atmosphere (céu/hora do dia), effects (neblina, refração do choque)
   sim/                     orquestração da animação e som sintetizado
   game/                    Oficina, Meu Arsenal, desafios, conquistas
   ui/                      painéis, resultados, gráficos SVG, notificações

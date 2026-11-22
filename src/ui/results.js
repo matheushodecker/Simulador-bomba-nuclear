@@ -190,7 +190,7 @@ export function initResults({ layers, city, sim }) {
     countries = null;
     falloutT = 1;
     render();
-    if (matchMedia('(max-width: 900px)').matches === false) $('panel-results').classList.remove('collapsed');
+    if (matchMedia('(max-width: 900px)').matches === false && !state.cinema.active) $('panel-results').classList.remove('collapsed');
   });
   on('sim:stats', (stats) => { if (cur) { cur.stats = stats; const p = body.scrollTop; render(); body.scrollTop = p; } });
   on('density-changed', () => { const p = body.scrollTop; render(); body.scrollTop = p; });

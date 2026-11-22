@@ -95,6 +95,9 @@ void main() {
 const FIELD_FRAG = /* glsl */ `
 uniform sampler2D uTex;
 uniform float uFlash;
+uniform float uLightScale;
+uniform float uGammaOut;
+uniform float uEmissiveBoost;
 varying vec2 vUv;
 varying float vAlpha;
 varying vec3 vColor;
@@ -104,8 +107,9 @@ void main() {
   vec4 tx = texture2D(uTex, vUv);
   float a = tx.a * vAlpha;
   if (a < 0.003) discard;
-  vec3 col = vColor * (0.72 + 0.4 * vUv.y) * (0.8 + 0.25 * tx.r);
-  if (vKind > 2.5) col = mix(vec3(1.0, 0.85, 0.4), vec3(1.0, 0.3, 0.05), vK) * 1.4; // chama
+  vec3 col = vColor * (0.72 + 0.4 * vUv.y) * (0.8 + 0.25 * tx.r) * uLightScale;
+  col = pow(max(col, 0.0), vec3(uGammaOut));
+  if (vKind > 2.5) col = mix(vec3(1.0, 0.85, 0.4), vec3(1.0, 0.3, 0.05), vK) * 1.4 * uEmissiveBoost; // chama
   col = mix(col, vec3(1.0), uFlash * 0.7);
   gl_FragColor = vec4(col, a);
 }
@@ -120,6 +124,7 @@ export class ParticleField {
       uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 0, 1) },
       uWind: { value: new THREE.Vector2() },
       uTex: { value: puffTexture() }, uFlash: { value: 0 },
+      uLightScale: { value: 1 }, uGammaOut: { value: 1 }, uEmissiveBoost: { value: 1 },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms, vertexShader: FIELD_VERT, fragmentShader: FIELD_FRAG,

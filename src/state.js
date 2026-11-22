@@ -6,6 +6,18 @@ import { load, save } from './util/storage.js';
 import { emit } from './util/events.js';
 
 const prefs = load('prefs', {});
+const ENV = import.meta.env || {};
+const envProvider = ENV.VITE_GOOGLE_TILES_KEY ? 'google' : ENV.VITE_CESIUM_ION_TOKEN ? 'cesium' : null;
+const cinemaProvider = prefs.cinemaProvider || envProvider || 'google';
+
+/** Chave do serviço de cidades 3D: salva só neste navegador (ou vinda do .env local). */
+export function cinemaKeyFor(provider) {
+  const saved = load(`cinemaKey:${provider}`, '');
+  if (saved) return saved;
+  if (provider === 'google') return ENV.VITE_GOOGLE_TILES_KEY || '';
+  if (provider === 'cesium') return ENV.VITE_CESIUM_ION_TOKEN || '';
+  return '';
+}
 
 export const state = {
   gz: { lng: 132.4536, lat: 34.3955 }, // hipocentro de Hiroshima (Hospital Shima)
@@ -25,13 +37,17 @@ export const state = {
   density: 'auto',
   buildings: { radiusM: 1500, auto: true, loading: false, center: null, count: 0 },
   compare: { on: false, weaponId: 'castle-bravo', layout: 'same' },
+  cinema: { active: false, provider: cinemaProvider, key: '', timeOfDay: prefs.timeOfDay || 'dia' },
   lastResult: null,
 };
+
+state.cinema.key = cinemaKeyFor(state.cinema.provider);
 
 export function savePrefs() {
   save('prefs', {
     basemap: state.basemap, quality: state.quality, speed: state.speed, tint: state.tint,
     cinematic: state.cinematic, sound: state.sound, reduceFlash: state.reduceFlash,
+    cinemaProvider: state.cinema.provider, timeOfDay: state.cinema.timeOfDay,
   });
 }
 

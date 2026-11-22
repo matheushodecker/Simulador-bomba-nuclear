@@ -58,6 +58,9 @@ void main() {
 const FRAG = /* glsl */ `
 uniform vec3 uSunDir;
 uniform float uFlash;
+uniform float uLightScale;
+uniform float uGammaOut;
+uniform float uEmissiveBoost;
 varying vec3 vN;
 varying vec3 vColor;
 varying float vHeat;
@@ -67,7 +70,9 @@ void main() {
   float diff = max(dot(n, uSunDir), 0.0);
   vec3 col = vColor * (0.35 + 0.65 * diff + 0.15 * (0.5 + 0.5 * n.z));
   col = mix(col, vec3(0.42, 0.40, 0.37), vDust * 0.35); // coberto de poeira
-  col += vec3(1.0, 0.35, 0.05) * vHeat * 1.2;           // incandescente perto do ponto zero
+  col *= uLightScale;
+  col = pow(max(col, 0.0), vec3(uGammaOut));
+  col += vec3(1.0, 0.35, 0.05) * vHeat * 1.2 * uEmissiveBoost; // incandescente perto do ponto zero
   col = mix(col, vec3(1.0), uFlash);
   gl_FragColor = vec4(col, 1.0);
 }
@@ -91,6 +96,9 @@ export class Debris {
       uG: { value: 15.7 },
       uSunDir: { value: new THREE.Vector3(-0.45, -0.35, 0.82).normalize() },
       uFlash: { value: 0 },
+      uLightScale: { value: 1 },
+      uGammaOut: { value: 1 },
+      uEmissiveBoost: { value: 1 },
     };
     this.material = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG });
     this.mesh = null;

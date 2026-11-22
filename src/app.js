@@ -16,7 +16,7 @@ import { loadArsenal } from './game/arsenal.js';
 import { fmtDist, fmtSig, fmtTime, fmtInt, escapeHtml, fmtYield } from './util/format.js';
 import { damageInfo } from './physics/blast.js';
 
-export function createApp({ mapView, layers, scene, city, sim }) {
+export function createApp({ mapView, layers, scene, city, sim, cinema }) {
   const map = mapView.map;
   let loadCtrl = null;
   let orbitRaf = 0;
@@ -72,6 +72,7 @@ export function createApp({ mapView, layers, scene, city, sim }) {
         }
         scene.setOrigin(center);
         const n = city.setBuildings(list);
+        emit('buildings-loaded', { list, center });
         if (state.terrain) setTimeout(() => city.applyTerrain(true), 300);
         mapView.setHideStyleBuildings(n > 0);
         state.buildings.center = { ...center };
@@ -159,7 +160,8 @@ export function createApp({ mapView, layers, scene, city, sim }) {
         && (!state.buildings.center || haversineKm(state.buildings.center, state.gz) > (state.buildings.radiusM / 1000) * 0.5);
       if (needLoad) app.loadBuildings(state.gz, state.buildings.radiusM);
       sim.stop();
-      if (state.cinematic) await app.cinematic(preview);
+      if (cinema?.active) await cinema.prepare(preview);
+      else if (state.cinematic) await app.cinematic(preview);
       const fx = sim.detonate(params, state.gz, {
         speed: state.speed, quality: state.quality, reduceFlash: state.reduceFlash, sound: state.sound,
       });
@@ -169,7 +171,7 @@ export function createApp({ mapView, layers, scene, city, sim }) {
       if (fx.yieldKt >= 50000) unlock('czar');
       if (fx.yieldKt <= 0.05) unlock('micro');
       app.updateCompare();
-      if (state.cinematic) {
+      if (state.cinematic && !cinema?.active) {
         app.startOrbit();
         app.pullBackForCloud(fx, (fx.arrivalAt(fx.radius.blast3) / sim.accel) * 1000 + 1500);
       }

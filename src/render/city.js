@@ -104,6 +104,9 @@ uniform float uFireLight;
 uniform float uFireRange2;
 uniform vec2 uGZ;
 uniform vec3 uDamage[6];
+uniform float uLightScale;
+uniform float uGammaOut;
+uniform float uEmissiveBoost;
 varying vec3 vPos;
 varying vec3 vColor;
 varying vec2 vCenter;
@@ -160,7 +163,7 @@ void main() {
 
   float diff = max(dot(n, uSunDir), 0.0);
   float sky = 0.5 + 0.5 * n.z;
-  vec3 col = base * (0.36 + 0.55 * diff + 0.18 * sky);
+  vec3 col = base * (0.36 + 0.55 * diff + 0.18 * sky) * uLightScale;
   col *= mix(0.7, 1.0, smoothstep(0.0, 10.0, vWinZ)); // oclusão perto do chão
 
   // luz da bola de fogo
@@ -182,11 +185,11 @@ void main() {
     float flick = 0.55 + 0.45 * sin(uNow * 9.0 + vSeed * 50.0 + vWinZ * 0.7) * sin(uNow * 5.3 + vU * 0.5);
     float lowZ = 1.0 - smoothstep(0.0, 22.0, vWinZ * (1.0 - vProg * 0.8));
     float fire = smoothstep(0.2, 3.0, uTime) * flick * (roof ? 0.35 : 1.0) * (0.35 + 0.65 * lowZ);
-    col += vec3(1.0, 0.4, 0.07) * fire * 0.6;
+    col += vec3(1.0, 0.4, 0.07) * fire * 0.6 * uEmissiveBoost;
   }
 
   col = mix(col, vec3(1.0, 0.98, 0.94), uFlash);
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(pow(max(col, 0.0), vec3(uGammaOut)), 1.0);
 }
 `;
 
@@ -237,6 +240,10 @@ export class City {
     this.fire = { pos: new THREE.Vector3(), light: 0, range: 1000 };
     this.gzLocal = [0, 0];
     this.flash = 0;
+    // ajustes usados pelo modo cinema (saída linear/HDR e iluminação por hora do dia)
+    this.lightScale = 1;
+    this.gammaOut = 1;
+    this.emissiveBoost = 1;
   }
 
   get loaded() {
@@ -375,6 +382,9 @@ export class City {
       uFireLight: { value: 0 },
       uFireRange2: { value: 1e6 },
       uDamage: { value: DAMAGE_RGB },
+      uLightScale: { value: 1 },
+      uGammaOut: { value: 1 },
+      uEmissiveBoost: { value: 1 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -513,6 +523,9 @@ export class City {
     u.uFirePos.value.copy(this.fire.pos);
     u.uFireLight.value = this.fire.light;
     u.uFireRange2.value = this.fire.range * this.fire.range;
+    u.uLightScale.value = this.lightScale;
+    u.uGammaOut.value = this.gammaOut;
+    u.uEmissiveBoost.value = this.emissiveBoost;
   }
 
   dispose() {
