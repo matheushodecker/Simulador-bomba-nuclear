@@ -16,6 +16,7 @@ import { unlock, trackHistoric } from '../game/achievements.js';
 import { fmtCoord, fmtYield, fmtInt, fmtNum, escapeHtml } from '../util/format.js';
 import { drawCompass, cardinal } from './compass.js';
 import { showView } from './views.js';
+import { OFFLINE } from '../env.js';
 
 const $ = (id) => document.getElementById(id);
 const LOG_MIN = Math.log10(CONFIG.yield.minKt);
@@ -25,6 +26,18 @@ const ktToSlider = (kt) => Math.round(((Math.log10(kt) - LOG_MIN) / (LOG_MAX - L
 
 export function initControls(app, mapView) {
   const map = mapView.map;
+
+  if (OFFLINE) {
+    // edição artefato: sem serviços externos — esconde o que depende deles
+    $('search-form').hidden = true;
+    $('search-results').hidden = true;
+    $('wind-fetch').hidden = true;
+    $('terrain').closest('label').hidden = true;
+    const note = document.createElement('p');
+    note.className = 'muted small';
+    note.textContent = 'Edição de demonstração: cidade-modelo gerada pelo próprio app. Busca de lugares, mapas reais, prédios do OpenStreetMap, vento atual e cidades 3D do Google funcionam na versão completa (npm run dev).';
+    $('search-form').after(note);
+  }
 
   /* ---------------- busca ---------------- */
   const results = $('search-results');

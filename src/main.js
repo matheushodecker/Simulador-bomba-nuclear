@@ -38,6 +38,7 @@ import { renderFontes } from './pages/fontes.js';
 import { unlock } from './game/achievements.js';
 import { CONFIG } from './config.js';
 import { load, save } from './util/storage.js';
+import { OFFLINE } from './env.js';
 
 initToasts();
 initViews();
@@ -110,8 +111,23 @@ registerView('validacao', (el, first) => { renderValidacao(el, ctx, first); unlo
 registerView('fontes', (el, first) => renderFontes(el, ctx, first));
 on('view', (name) => { if (name === 'sim') setTimeout(() => map.resize(), 30); });
 
-// menu inicial com os 3 modos de escolha da arma (só na primeira visita)
-if (!load('seenMenu', false)) {
+if (OFFLINE) {
+  // edição artefato: abre direto na cidade-modelo, já em 3D
+  document.querySelector('.brand-text small').textContent = 'Demonstração · Glasstone & Dolan (1977)';
+  let started = false;
+  on('style-ready', () => {
+    if (started) return;
+    started = true;
+    app.loadBuildings(state.gz, state.buildings.radiusM).then(() => {
+      if (window.innerWidth > 900) {
+        document.getElementById('vs-cinema').click();
+      } else {
+        map.easeTo({ pitch: 55, bearing: -25, zoom: 14.2, duration: 1200 });
+      }
+    });
+  });
+} else if (!load('seenMenu', false)) {
+  // menu inicial com os 3 modos de escolha da arma (só na primeira visita)
   save('seenMenu', true);
   showView('armas');
 }

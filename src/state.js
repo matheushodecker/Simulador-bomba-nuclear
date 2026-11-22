@@ -4,6 +4,8 @@
  */
 import { load, save } from './util/storage.js';
 import { emit } from './util/events.js';
+import { OFFLINE } from './env.js';
+import { DEMO_CENTER } from './data/demoCity.js';
 
 const prefs = load('prefs', {});
 const ENV = import.meta.env || {};
@@ -20,13 +22,14 @@ export function cinemaKeyFor(provider) {
 }
 
 export const state = {
-  gz: { lng: 132.4536, lat: 34.3955 }, // hipocentro de Hiroshima (Hospital Shima)
+  // hipocentro de Hiroshima (Hospital Shima); na edição artefato, a praça central da cidade-modelo
+  gz: OFFLINE ? { ...DEMO_CENTER } : { lng: 132.4536, lat: 34.3955 },
   yieldKt: 15,
   weapon: { name: 'Little Boy (Hiroshima)', id: 'little-boy', type: 'fissao', fissionFraction: 1 },
   burst: { mode: 'custom', heightM: 600 },
   wind: { speedKmh: 24, fromDeg: 270, source: 'manual' },
   clickMode: 'target',
-  basemap: prefs.basemap || 'liberty',
+  basemap: OFFLINE ? 'demo' : prefs.basemap || 'liberty',
   terrain: false,
   quality: prefs.quality || (matchMedia('(max-width: 900px)').matches ? 'baixa' : 'media'),
   speed: prefs.speed || 'normal',
@@ -35,13 +38,13 @@ export const state = {
   sound: prefs.sound ?? true,
   reduceFlash: prefs.reduceFlash ?? matchMedia('(prefers-reduced-motion: reduce)').matches,
   density: 'auto',
-  buildings: { radiusM: 1500, auto: true, loading: false, center: null, count: 0 },
+  buildings: { radiusM: OFFLINE ? 2000 : 1500, auto: true, loading: false, center: null, count: 0 },
   compare: { on: false, weaponId: 'castle-bravo', layout: 'same' },
-  cinema: { active: false, provider: cinemaProvider, key: '', timeOfDay: prefs.timeOfDay || 'dia' },
+  cinema: { active: false, provider: OFFLINE ? 'none' : cinemaProvider, key: '', timeOfDay: prefs.timeOfDay || 'dia' },
   lastResult: null,
 };
 
-state.cinema.key = cinemaKeyFor(state.cinema.provider);
+state.cinema.key = OFFLINE ? '' : cinemaKeyFor(state.cinema.provider);
 
 export function savePrefs() {
   save('prefs', {

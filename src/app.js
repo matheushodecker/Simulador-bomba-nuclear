@@ -15,6 +15,8 @@ import { HISTORIC_WEAPONS } from './data/weapons.js';
 import { loadArsenal } from './game/arsenal.js';
 import { fmtDist, fmtSig, fmtTime, fmtInt, escapeHtml, fmtYield } from './util/format.js';
 import { damageInfo } from './physics/blast.js';
+import { OFFLINE } from './env.js';
+import { demoCity } from './data/demoCity.js';
 
 export function createApp({ mapView, layers, scene, city, sim, cinema }) {
   const map = mapView.map;
@@ -55,12 +57,18 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
       state.buildings.loading = true;
       emit('buildings-status', { text: 'Carregando prédios do OpenStreetMap…', kind: 'busy' });
       try {
-        const json = await fetchBuildings(center.lat, center.lng, radiusM, {
-          signal: ctrl.signal,
-          onStatus: (text) => emit('buildings-status', { text, kind: 'busy' }),
-        });
-        if (ctrl.signal.aborted) return;
-        let list = parseBuildings(json);
+        let list;
+        if (OFFLINE) {
+          // edição artefato: prédios da cidade-modelo dentro do raio
+          list = demoCity().buildings.filter((b) => haversineKm(center, { lng: b.outer[0][0], lat: b.outer[0][1] }) * 1000 <= radiusM);
+        } else {
+          const json = await fetchBuildings(center.lat, center.lng, radiusM, {
+            signal: ctrl.signal,
+            onStatus: (text) => emit('buildings-status', { text, kind: 'busy' }),
+          });
+          if (ctrl.signal.aborted) return;
+          list = parseBuildings(json);
+        }
         const max = CONFIG.buildings.maxCount[state.quality] || 20000;
         const truncated = list.length > max;
         if (truncated) {
@@ -80,8 +88,8 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
         state.buildings.loadedRadiusM = radiusM;
         emit('buildings-status', {
           text: n
-            ? `✔ ${fmtInt(n)} prédios reais carregados (raio ${fmtDist(radiusM / 1000)})${truncated ? ` — limitado pela qualidade "${state.quality}"` : ''}.`
-            : 'Nenhum prédio mapeado nesta área do OpenStreetMap.',
+            ? `✔ ${fmtInt(n)} prédios ${OFFLINE ? 'da cidade-modelo' : 'reais'} carregados (raio ${fmtDist(radiusM / 1000)})${truncated ? ` — limitado pela qualidade "${state.quality}"` : ''}.`
+            : OFFLINE ? 'Fora da cidade-modelo: não há prédios aqui. Volte para perto do centro.' : 'Nenhum prédio mapeado nesta área do OpenStreetMap.',
           kind: n ? 'ok' : 'warn',
         });
         if (n) unlock('cidade3d');
@@ -260,6 +268,7 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
 
   /** Verifica se o fallout cruza fronteiras (geocodificação reversa ao longo do eixo da pluma). */
   on('sim:fallout-complete', async ({ fx, gz }) => {
+    if (OFFLINE) return;
     const c1 = fx.fallout.contours.find((c) => c.level === 1);
     if (!c1 || c1.L < 5) return;
     const pts = [gz, ...[0.35, 0.7, 1].map((f) => destination(gz, fx.fallout.downwindBearing, c1.L * f))];

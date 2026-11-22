@@ -62,3 +62,12 @@ export function pointInRing(x, y, ring) {
   }
   return inside;
 }
+
+/** Metros por grau (elipsoide WGS-84, aproximação usual). */
+export function metersPerDegree(latDeg) {
+  const p = (latDeg * Math.PI) / 180;
+  return {
+    lat: 111132.92 - 559.82 * Math.cos(2 * p) + 1.175 * Math.cos(4 * p),
+    lon: 111412.84 * Math.cos(p) - 93.5 * Math.cos(3 * p),
+  };
+}

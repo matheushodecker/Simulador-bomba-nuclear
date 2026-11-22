@@ -2,6 +2,7 @@
 import { state, savePrefs, cinemaKeyFor } from '../state.js';
 import { save } from '../util/storage.js';
 import { on, emit } from '../util/events.js';
+import { OFFLINE } from '../env.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -75,5 +76,10 @@ export function initCinemaControls({ cinema, mapView }) {
   });
   $('quality').addEventListener('change', () => cinema.applyQuality());
   render();
+  if (OFFLINE) {
+    prov.closest('.row').hidden = true;
+    $('cinema-key-row').style.display = 'none';
+    $('cinema-key-help').textContent = 'Nesta edição de demonstração o modo cinema usa a cidade-modelo. Com a versão completa e uma chave do Google ou do Cesium ion, ele mostra cidades fotorrealistas reais.';
+  }
   return { setActive };
 }

@@ -12,14 +12,11 @@ import { emit } from '../util/events.js';
 
 const D2R = Math.PI / 180;
 
-/** Metros por grau (elipsoide WGS-84, aproximação usual). */
-export function metersPerDegree(latDeg) {
-  const p = latDeg * D2R;
-  return {
-    lat: 111132.92 - 559.82 * Math.cos(2 * p) + 1.175 * Math.cos(4 * p),
-    lon: 111412.84 * Math.cos(p) - 93.5 * Math.cos(3 * p),
-  };
-}
+import { metersPerDegree } from '../map/geo.js';
+import { OFFLINE } from '../env.js';
+import { demoCity } from '../data/demoCity.js';
+
+export { metersPerDegree };
 
 /* ======================= Google / Cesium ion ======================= */
 
@@ -170,6 +167,61 @@ function quad(level, y, uniforms) {
   return mesh;
 }
 
+/** Textura do chão da cidade-modelo: asfalto, faixas, calçadas, parques e rio. */
+function demoGround(lat, lon) {
+  const c = demoCity();
+  const mpd = metersPerDegree(lat);
+  const off = [(c.center.lng - lon) * mpd.lon, (c.center.lat - lat) * mpd.lat];
+  const S = c.radius + 500;
+  const W = 4096;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = W;
+  const g = cv.getContext('2d');
+  const X = (e) => ((e + S) / (2 * S)) * W;
+  const Y = (n) => ((S - n) / (2 * S)) * W;
+  const k = W / (2 * S);
+  g.fillStyle = '#78736a';
+  g.fillRect(0, 0, W, W);
+  // textura de solo/terrenos
+  for (let i = 0; i < 60000; i++) {
+    const v = 95 + Math.floor(Math.random() * 40);
+    g.fillStyle = `rgba(${v},${v - 4},${v - 10},0.18)`;
+    g.fillRect(Math.random() * W, Math.random() * W, 2 + Math.random() * 5, 2 + Math.random() * 5);
+  }
+  const poly = (ring, fill) => {
+    g.beginPath();
+    ring.forEach(([e, n], i) => (i ? g.lineTo(X(e), Y(n)) : g.moveTo(X(e), Y(n))));
+    g.closePath();
+    g.fillStyle = fill;
+    g.fill();
+  };
+  c.parks.forEach((r) => poly(r, '#56703f'));
+  for (let i = 0; i < 25000; i++) {
+    const r = c.parks[i % c.parks.length];
+    if (!r) break;
+    const x = r[0][0] + Math.random() * (r[2][0] - r[0][0]);
+    const y = r[0][1] + Math.random() * (r[2][1] - r[0][1]);
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(40,70,30,0.5)' : 'rgba(110,140,80,0.35)';
+    g.beginPath(); g.arc(X(x), Y(y), 1.5 + Math.random() * 4, 0, Math.PI * 2); g.fill();
+  }
+  c.water.forEach((r) => poly(r, '#2f4a55'));
+  // ruas: calçada clara, asfalto e faixa central nas avenidas
+  const line = (coords, width, color, dash) => {
+    g.beginPath();
+    coords.forEach(([e, n], i) => (i ? g.lineTo(X(e), Y(n)) : g.moveTo(X(e), Y(n))));
+    g.strokeStyle = color; g.lineWidth = width * k; g.setLineDash(dash ? dash.map((d) => d * k) : []);
+    g.stroke();
+  };
+  c.roads.forEach((r) => line(r.coords, r.w + 6, '#a39d91'));
+  c.roads.forEach((r) => line(r.coords, r.w, '#353638'));
+  c.roads.filter((r) => r.w > 20).forEach((r) => line(r.coords, 0.5, '#d8d2b8', [6, 6]));
+  g.setLineDash([]);
+  return {
+    canvas: cv,
+    west: -S + off[0], east: S + off[0], south: -S + off[1], north: S + off[1],
+  };
+}
+
 export class FallbackWorld {
   constructor({ uniforms }) {
     this.kind = 'fallback';
@@ -193,6 +245,11 @@ export class FallbackWorld {
     const fallback = new THREE.Mesh(new THREE.PlaneGeometry(400000, 400000).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x6b6f62 }));
     fallback.position.y = -1.2;
     this.ground.add(fallback);
+    if (OFFLINE) {
+      this.ground.add(quad(demoGround(lat, lon), 0, this.uniforms));
+      this.loading = false;
+      return;
+    }
     const levels = [[10, 70000, -0.8], [13, 11000, -0.4], [16, 2100, 0]];
     for (const [z, half, y] of levels) {
       const lv = await imageryLevel(lat, lon, z, half, ctrl.signal);
@@ -222,7 +279,7 @@ export class FallbackWorld {
   }
 
   attributions() {
-    return 'Imagens © Esri, Maxar, Earthstar Geographics · Prédios © colaboradores do OpenStreetMap';
+    return OFFLINE ? 'Cidade-modelo procedural (demonstração)' : 'Imagens © Esri, Maxar, Earthstar Geographics · Prédios © colaboradores do OpenStreetMap';
   }
 
   dispose() {

@@ -4,13 +4,16 @@
  *  - Esri World Imagery: imagens de satélite (uso com atribuição).
  *  - OpenStreetMap padrão (raster).
  */
+import { OFFLINE } from '../env.js';
+import { demoStyle } from '../data/demoCity.js';
+
 const OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 
 function rasterStyle(sources, layers) {
   return { version: 8, sources, layers };
 }
 
-export const BASEMAPS = {
+const ONLINE_BASEMAPS = {
   liberty: {
     label: 'Ruas 3D — OpenFreeMap Liberty',
     style: 'https://tiles.openfreemap.org/styles/liberty',
@@ -71,6 +74,10 @@ export const BASEMAPS = {
     ),
   },
 };
+
+export const BASEMAPS = OFFLINE
+  ? { demo: { label: 'Cidade-modelo (offline)', style: demoStyle(), vector: false } }
+  : ONLINE_BASEMAPS;
 
 /** Fonte de relevo pública (AWS Terrain Tiles, codificação Terrarium). */
 export const TERRAIN_SOURCE = {

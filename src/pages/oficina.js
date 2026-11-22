@@ -196,7 +196,11 @@ function renderArsenal(el, ctx) {
     el.scrollTop = 0;
   }));
   grid.querySelectorAll('[data-del]').forEach((x) => x.addEventListener('click', () => {
-    const w = list.find((y) => y.id === x.dataset.del);
-    if (confirm(`Excluir "${w.name}" do Meu Arsenal?`)) deleteWeapon(w.id);
+    // confirmação em dois cliques (diálogos do navegador não funcionam em todos os ambientes)
+    if (x.dataset.armed) { deleteWeapon(x.dataset.del); return; }
+    x.dataset.armed = '1';
+    x.textContent = 'Confirmar exclusão';
+    x.classList.add('danger');
+    setTimeout(() => { if (x.isConnected) { delete x.dataset.armed; x.textContent = '🗑️'; x.classList.remove('danger'); } }, 3500);
   }));
 }
