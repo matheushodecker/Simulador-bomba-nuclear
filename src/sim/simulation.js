@@ -88,6 +88,22 @@ export class Simulation {
     let stats = null;
     if (this.city.loaded) {
       stats = this.city.applyDetonation(fx, this.gzLocal, this.accel);
+      // física estrutural para os prédios danificados mais perto do centro da vista
+      if (this.structural) {
+        const c = this.map.getCenter();
+        const plan = this.structural.plan({
+          buildings: blds, fx, accel: this.accel, gz: this.gzLocal,
+          focus: this.scene.toLocal(c.lng, c.lat), quality: this.opts.quality,
+        });
+        stats.physics = plan;
+        this.structural.build({ groundZ: 0 }).then((ok) => {
+          if (ok && this.fx === fx) this.city.setPhysicsHidden(this.structural.handled, true);
+        }).catch((e) => {
+          console.warn('[física] indisponível; usando o colapso simplificado', e);
+          blds.forEach((b) => { b.physics = false; });
+          if (this.fx === fx) this.debris.generate(blds, this.gzLocal, this.q.debris, fx.radius.fireball);
+        });
+      }
       stats.debris = this.debris.generate(blds, this.gzLocal, this.q.debris, fx.radius.fireball);
     } else {
       this.debris.clear();
@@ -138,7 +154,19 @@ export class Simulation {
 
     const flash = Math.exp(-tau / 0.16) * (this.opts.reduceFlash ? 0.25 : 1);
     this.city.flash = flash * 0.9;
+    if (this.structural) {
+      const su = this.structural.uniforms;
+      const cu = this.city.uniforms;
+      this.structural.flash = flash * 0.9;
+      if (cu) {
+        su.uSunDir.value.copy(cu.uSunDir.value);
+        su.uFirePos.value.copy(cu.uFirePos.value);
+        su.uFireLight.value = cu.uFireLight.value;
+        su.uFireRange2.value = cu.uFireRange2.value;
+      }
+    }
     this.city.pulse = fx.thermalPulse ? fx.thermalPulse.fractionAt(tPhys) : smoothstep(0, 0.6, tau);
+    if (this.structural) this.structural.pulse = this.city.pulse;
     this.debris.flash = flash * 0.9;
     this.dust.flash = flash;
     this.flashEl.style.opacity = this.cinemaActive ? '0' : String(this.opts.reduceFlash ? flash * 0.35 : flash);
@@ -216,6 +244,7 @@ export class Simulation {
     this.scene.active = false;
     this.layers.clear();
     this.city.reset();
+    this.structural?.dispose();
     this.debris.clear();
     this.dust.clear();
     this.fire.clear();

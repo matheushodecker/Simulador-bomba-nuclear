@@ -20,7 +20,7 @@ import { VolumetricExplosionPass } from './volumetric.js';
 import { AerialPerspectiveEffect, ShockRippleEffect, RadiiEffect } from './effects.js';
 import { createDestructionUniforms, fillLut, buildHeightGrid } from './destruction.js';
 import { TilesWorld, FallbackWorld, metersPerDegree } from './worlds.js';
-import { PhysicsDebris } from './physicsDebris.js';
+import { StructuralDestruction } from '../render/structural.js';
 import { FluidController } from './fluid/FluidController.js';
 import { cloudState } from '../render/cloudModel.js';
 import { City } from '../render/city.js';
@@ -95,8 +95,9 @@ export class CinemaView {
     this.fire = new ParticleField({ additive: true });
     [this.debris, this.dust, this.smoke, this.fire].forEach((o) => this.enu.add(o.object3d));
     this.city = null;
-    this.physics = new PhysicsDebris();
-    this.scene.add(this.physics.object3d);
+    // destruição estrutural (paredes, lajes, colapso progressivo) com física de corpo rígido
+    this.physics = new StructuralDestruction();
+    this.enu.add(this.physics.object3d);
     this.fluid = new FluidController(renderer);
 
     // luz da bola de fogo
@@ -407,6 +408,8 @@ export class CinemaView {
     if (this.city?.loaded) {
       this.city.applyDetonation(fx, [0, 0], this.accel);
       blds = this.city.buildings;
+      this.physics.overlay = false;
+      this.physics.plan({ buildings: blds, fx, accel: this.accel, gz: [0, 0], focus: this._physicsFocus(fx), quality: this.state.quality });
     } else if (this.world?.kind === 'tiles') {
       blds = this._syntheticBuildings(fx, this.accel);
     }
@@ -438,31 +441,42 @@ export class CinemaView {
       const base = groundAt(cx, cy) + (b.minHeight || 0);
       const dKm = Math.hypot(cx, cy) / 1000;
       return {
-        c: [cx, cy], outer, holes: (b.holes || []).map((h) => h.map(toENU)), base, top: base + b.height,
+        c: [cx, cy], outer, holes: (b.holes || []).map((h) => h.map(toENU)), base, top: base + b.height, ground: base - (b.minHeight || 0),
         dKm, psi: fx.psiAt(dKm), level: fx.damageLevelAt(dKm), arrival: fx.arrivalAt(dKm) / accel, color: b.color,
       };
     });
   }
 
-  async _preparePhysics() {
-    const fx = this.fx;
-    if (!fx) return;
-    let blds;
-    if (this.city?.loaded) blds = this.city.buildings.map((b) => ({ ...b, color: b.src.color }));
-    else if (this.world?.kind === 'tiles') {
-      const osm = this._osmRecords(fx, this.accel);
-      blds = osm.length ? osm : this._syntheticBuildings(fx, this.accel).map((b) => ({ ...b, color: b.src.color }));
-    } else blds = [];
-    // foco: ponto entre a câmera e o ponto zero, dentro da zona de colapso
+  /** Ponto prioritário para a física: entre a câmera e o ponto zero, dentro da zona de colapso. */
+  _physicsFocus(fx) {
     const [e, n] = this.worldToENU(this.camera.position);
     const dCam = Math.hypot(e, n) || 1;
     const k = Math.min(0.55, (fx.radius.blast5 * 1000 * 0.7) / dCam);
+    return [e * k, n * k];
+  }
+
+  /**
+   * Física estrutural. Com a cidade de prédios do mapa, as peças SUBSTITUEM os prédios (o plano é
+   * feito antes, em _applyFxToBuildings). Com a cidade fotorrealista, as peças só aparecem quando
+   * se soltam, por cima da malha (que continua deformando por distância).
+   */
+  async _preparePhysics() {
+    const fx = this.fx;
+    if (!fx) return;
+    const ph = this.physics;
+    if (!this.city?.loaded) {
+      let blds = [];
+      if (this.world?.kind === 'tiles') {
+        const osm = this._osmRecords(fx, this.accel);
+        blds = osm.length ? osm : this._syntheticBuildings(fx, this.accel);
+      }
+      ph.overlay = true;
+      ph.plan({ buildings: blds, fx, accel: this.accel, gz: [0, 0], focus: this._physicsFocus(fx), quality: this.state.quality });
+    }
     try {
-      const count = await this.physics.prepare({
-        buildings: blds, enuToWorld: (a, b, c) => this.enuToWorld(a, b, c), focus: [e * k, n * k],
-        grid: this.grid, groundY: this.groundY, quality: this.state.quality,
-      });
-      console.info(`[cinema] física: ${count} pedaços de prédios`);
+      const ok = await ph.build({ groundZ: 0 });
+      if (ok && this.fx === fx && this.city?.loaded) this.city.setPhysicsHidden(ph.handled, true);
+      if (ok) console.info(`[cinema] física estrutural: ${ph.blds.length} prédios, ${ph.els.length} peças`);
     } catch (err) {
       console.warn('[cinema] física indisponível', err);
     }
@@ -697,7 +711,7 @@ export class CinemaView {
       up: new THREE.Vector3(-upW.x, upW.z, upW.y),
       matrix: this.camera.projectionMatrix,
     };
-    for (const o of [this.debris, this.dust, this.smoke, this.fire]) {
+    for (const o of [this.debris, this.dust, this.smoke, this.fire, this.physics]) {
       if (o.uniforms.uLightScale) {
         o.uniforms.uLightScale.value = Math.max(0.12, p.ambient);
         o.uniforms.uGammaOut.value = 2.2;
@@ -752,7 +766,6 @@ export class CinemaView {
     }
     u.uDFire.value = 1;
 
-    this.physics.update(tau);
 
     // nuvem volumétrica
     const vu = this.vol.uniforms;
@@ -833,6 +846,12 @@ export class CinemaView {
       this.city.fire.range = Math.max(cs.fbR * 6, 600);
       this.city.update({ tau, now });
     }
+    const pu = this.physics.uniforms;
+    pu.uFirePos.value.set(0, 0, cs.fbZ);
+    pu.uFireLight.value = L * 1.5;
+    pu.uFireRange2.value = Math.max(cs.fbR * 6, 600) ** 2;
+    this.physics.flash = Math.min(1, flash * 0.4);
+    this.physics.pulse = u.uDPulse.value;
   }
 
   /* --------------------------- interação --------------------------- */

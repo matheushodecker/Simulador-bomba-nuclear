@@ -17,6 +17,7 @@ import { MushroomCloud } from './render/mushroom.js';
 import { Fireball } from './render/fireball.js';
 import { ShockDome } from './render/shockwave.js';
 import { GroundEffects } from './render/ground.js';
+import { StructuralDestruction, loadRapier } from './render/structural.js';
 import { Simulation } from './sim/simulation.js';
 import { setSoundEnabled } from './sim/audio.js';
 import { createApp } from './app.js';
@@ -61,8 +62,9 @@ const ground = new GroundEffects();
 const fireball = new Fireball();
 const mushroom = new MushroomCloud(maxQ.cloud);
 const shock = new ShockDome();
+const structural = new StructuralDestruction();
 // a ordem importa para a transparência: chão → prédios → destroços → poeira → fogo → nuvem → choque
-[ground, city, debris, smoke, dust, fire, fireball, mushroom, shock].forEach((o) => scene.add(o));
+[ground, city, structural, debris, smoke, dust, fire, fireball, mushroom, shock].forEach((o) => scene.add(o));
 city.tint = state.tint ? 1 : 0;
 
 on('style-ready', () => {
@@ -80,7 +82,7 @@ map.on('pitchend', () => { if (map.getPitch() > 30) unlock('explorador3d'); });
 
 /* ---------- simulação e app ---------- */
 const sim = new Simulation({
-  map, layers, scene, city, debris, dust, smoke, fire, fireball, mushroom, shock, ground,
+  map, layers, scene, city, structural, debris, dust, smoke, fire, fireball, mushroom, shock, ground,
   hudEl: document.getElementById('hud'),
   flashEl: document.getElementById('flash'),
   shakeEl: document.getElementById('map-wrap'),
@@ -92,12 +94,16 @@ const app = createApp({ mapView, layers, scene, city, sim, cinema });
 on('sim:start', (d) => { if (cinema.active) cinema.onDetonate(d); });
 on('cleared', () => cinema.onClear());
 on('gz-changed', (gz) => { if (cinema.active) cinema.setOrigin(gz); });
-on('buildings-loaded', ({ list }) => cinema.setBuildings(list));
+on('buildings-loaded', ({ list }) => {
+  cinema.setBuildings(list);
+  // baixa o motor de física com antecedência (não atrasa a explosão)
+  if (list.length) setTimeout(() => loadRapier().catch(() => {}), 1500);
+});
 on('cinema-pick', (ll) => app.setGZ(ll));
 on('tint-changed', () => { if (cinema.city) cinema.city.tint = state.tint ? 0.85 : 0; });
 const controls = initControls(app, mapView);
 const results = initResults({ layers, city, sim });
-results.registerObjects({ city, debris, dust, smoke, fire, fireball, mushroom, shock, ground });
+results.registerObjects({ city, structural, debris, dust, smoke, fire, fireball, mushroom, shock, ground });
 initCinemaControls({ cinema, mapView });
 
 /* ---------- páginas ---------- */

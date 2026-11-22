@@ -267,6 +267,15 @@ export function renderFisica(el, ctx, first) {
           e aço resistem muito mais. Explosões nucleares têm fase positiva longa (décimos de s a segundos), por isso destroem mais do que uma explosão química com o mesmo pico.</p>
         </article>
         <article>
+          <h3>🏚️ Destruição estrutural (corpo rígido)</h3>
+          <p>Os prédios perto da vista viram estrutura: painéis de parede por andar e trecho de fachada, e lajes divididas em placas, cada peça com a massa
+          do seu material. A onda aplica <b>F = p(t)·A</b> (refletida nas fachadas de frente) e o vento da onda arrasta as peças soltas
+          (<b>F = ½·ρ·C<sub>d</sub>·A·u²</b>); o motor de física (Rapier) cuida da gravidade e das colisões.</p>
+          <p class="muted small">Uma peça só se solta quando a carga passa da resistência do material. Em paredes portantes (alvenaria, madeira), perder mais da
+          metade das paredes de um andar derruba tudo acima ("panqueca"); em pórticos (concreto, aço) a fachada voa mas o esqueleto fica, a não ser sob
+          pressões muito altas. Impactos fortes quebram peças presas e partem as soltas, levantando poeira.</p>
+        </article>
+        <article>
           <h3>🌍 Reflexão e vibração do solo</h3>
           <p>Ao bater no chão, a onda reflete: perto do marco zero a reflexão é regular; além de ~40° a refletida (mais rápida, no ar já comprimido) alcança a incidente e forma o
           <b>tronco de Mach</b>, cuja altura (ponto triplo) cresce com a distância. Uma parede voltada para a onda sente de 2× a 8× a sobrepressão (Rankine–Hugoniot).</p>

@@ -45,7 +45,11 @@ void main() {
   vec3 axis = normalize(vec3(fract(seed * 13.1) - 0.5, fract(seed * 7.7) - 0.5, fract(seed * 3.3) - 0.5) + 1e-3);
   float spin = (1.5 + seed * 7.0) * tt;
   mat3 R = rotAxis(axis, spin);
-  vec3 dims = vec3(1.0, 0.7 + fract(seed * 5.1) * 0.7, 0.45 + fract(seed * 9.3) * 0.7);
+  // formas variadas: placas (pedaços de laje/parede), vigas e blocos — não cubos
+  float cls = fract(seed * 17.3);
+  vec3 dims = cls < 0.42 ? vec3(1.0, 0.6 + fract(seed * 5.1) * 0.5, 0.08 + fract(seed * 9.3) * 0.1)
+            : cls < 0.7  ? vec3(1.7, 0.14 + fract(seed * 5.1) * 0.12, 0.14 + fract(seed * 9.3) * 0.1)
+            :              vec3(1.0, 0.55 + fract(seed * 5.1) * 0.5, 0.35 + fract(seed * 9.3) * 0.5);
   vec3 local = R * (position * s * dims);
   vN = R * normal;
   vColor = iColor;
@@ -125,7 +129,8 @@ export class Debris {
     let total = 0;
     for (const r of buildings) {
       // vidros quebram bem antes da estrutura: estilhaços já a partir do nível 1
-      if (!(r.level >= 1)) { want.push(0); continue; }
+      // prédios entregues à física estrutural não geram voxels simples
+      if (!(r.level >= 1) || r.physics) { want.push(0); continue; }
       const vol = r.area * (r.top - r.base);
       const glass = r.level === 1 ? Math.min(6, 1 + (r.top - r.base) / 12) : 0;
       const per = r.level === 5 ? 10 + vol / 700 : r.level === 4 ? 6 + vol / 1400 : r.level === 3 ? 3 + vol / 3000 : r.level === 2 ? 1 + vol / 9000 : glass;

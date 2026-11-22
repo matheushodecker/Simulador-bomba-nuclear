@@ -81,7 +81,9 @@ void main() {
   vPos = p;
   p.z += aElev;
   vColor = C.rgb;
-  vEst = C.a;
+  vEst = mod(C.a, 2.0);
+  // prédio entregue à física estrutural: some daqui (as peças físicas ocupam o lugar)
+  if (C.a > 1.5 && uTime >= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   vCenter = A.xy;
   vU = aU;
   vWinZ = position.z - A.w;
@@ -370,6 +372,7 @@ export class City {
     this.texB = makeTex(Bd, rows);
     this.texC = makeTex(C, rows);
     this.dataB = Bd;
+    this.dataC = C;
 
     this.uniforms = {
       uTexA: { value: this.texA },
@@ -411,6 +414,7 @@ export class City {
     const arr = this.elevAttr.array;
     if (!on) {
       arr.fill(0);
+      for (const r of this.buildings) r.elev = 0;
     } else {
       const map = this.layer.map;
       const o = this.layer.origin;
@@ -419,6 +423,7 @@ export class City {
         const ll = this.layer.toLngLat(r.c[0], r.c[1]);
         const e = (map.queryTerrainElevation(ll) ?? e0) - e0;
         arr.fill(e, r.vStart, r.vEnd);
+        r.elev = e;
       }
     }
     this.elevAttr.needsUpdate = true;
@@ -464,9 +469,24 @@ export class City {
     return { counts, total: this.buildings.length, vaporized, floorArea };
   }
 
+  /** Esconde (ou mostra de volta) os prédios cuja destruição fica por conta da física estrutural. */
+  setPhysicsHidden(indices, hidden = true) {
+    if (!this.dataC) return;
+    for (const i of indices) {
+      const k = i * 4 + 3;
+      const est = this.dataC[k] % 2;
+      this.dataC[k] = est + (hidden ? 2 : 0);
+    }
+    this.texC.needsUpdate = true;
+  }
+
   /** Volta todos os prédios ao estado intacto. */
   reset() {
     if (!this.dataB) return;
+    if (this.dataC) {
+      for (let i = 0; i < this.buildings.length; i++) this.dataC[i * 4 + 3] %= 2;
+      this.texC.needsUpdate = true;
+    }
     for (let i = 0; i < this.buildings.length; i++) {
       this.dataB[i * 4] = 1e9;
       this.dataB[i * 4 + 1] = 0;

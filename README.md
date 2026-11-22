@@ -15,7 +15,13 @@ OpenStreetMap são renderizados em 3D e **destruídos em tempo (acelerado) real*
   vetoriais do OpenFreeMap (z14) que o mapa desenha, separa cada prédio, esconde os originais (pelo id) e
   coloca no lugar cópias destrutíveis em WebGL (three.js dentro do MapLibre). Acontece sozinho ao escolher
   o alvo e leva ~1–3 s; o raio é automático (cobre a zona de 3 psi), limitado pela qualidade. Se os blocos
-  falharem, a Overpass API é usada como reserva. Na detonação, cada prédio:
+  falharem, a Overpass API é usada como reserva.
+- **Destruição estrutural com física** (Rapier/WebAssembly, no mapa e no cinema): os prédios danificados perto
+  da vista viram paredes por andar (com janelas) e lajes, com a massa de cada material. A onda aplica a pressão no
+  tempo (refletida nas fachadas de frente) e o vento da onda arrasta os pedaços; peças só se soltam quando a carga
+  passa da resistência, paredes portantes que caem derrubam os andares de cima (colapso progressivo), impactos
+  quebram o que está preso e partem o que voa, com poeira. Os demais prédios usam o colapso simplificado.
+  Na detonação, cada prédio:
   - muda de cor conforme a sobrepressão (≥20, 10–20, 5–10, 3–5, 1–3 psi);
   - colapsa, inclina ou esfarela de acordo com o dano, no instante em que a onda chega;
   - solta destroços em **voxels** com trajetória balística (dezenas de milhares de blocos na GPU);
@@ -43,8 +49,8 @@ Botão **🎬 Cinema 3D** no topo do mapa. É um motor 3D próprio (three.js + p
 - **Bola de fogo e cogumelo volumétricos** (raymarching com ruído Perlin-Worley, auto-sombreamento, emissão de corpo negro, fuligem), com a saia de poeira nas explosões no solo.
 - **Luz da bola de fogo com sombras** sobre a cidade, clarão, refração da onda de choque e nuvem de condensação.
 - **Destruição na GPU** da malha fotogramétrica: o que está acima do chão desaba conforme a onda chega, fachadas carbonizam, focos de incêndio, destroços em voxels, poeira e fumaça.
-- **Destroços com física de corpo rígido** (Rapier/WebAssembly): os prédios atingidos perto da câmera são fatiados em
-  andares e colunas que a onda de choque empurra, caem com a gravidade, colidem e se amontoam em escombros.
+- **Destruição estrutural** também no cinema: com a cidade fotorrealista, as peças aparecem quando se soltam, por cima da
+  malha (que continua deformando por distância).
 - **Poeira volumétrica**: muro de poeira que acompanha a frente de choque e camada de poeira sobre a área destruída.
 - **Câmera cinematográfica** que acompanha a onda e recua para enquadrar o cogumelo (qualquer clique devolve o controle).
 
@@ -111,7 +117,7 @@ src/
   cinema/                  modo cinema: CinemaView (motor), worlds (Google/Cesium/satélite+OSM),
                            volumetric (nuvem por raymarching), destruction (shader da malha),
                            atmosphere (céu/hora do dia), effects (neblina, refração do choque),
-                           physicsDebris (escombros com física Rapier, carregada sob demanda)
+                           (destruição estrutural: render/structural.js, Rapier sob demanda)
   sim/                     orquestração da animação e som sintetizado
   game/                    Oficina, Meu Arsenal, desafios, conquistas
   ui/                      painéis, resultados, gráficos SVG, notificações

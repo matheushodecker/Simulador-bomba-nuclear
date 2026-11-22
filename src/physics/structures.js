@@ -228,3 +228,19 @@ export function groundParticleVelocity(psi, soil = SOIL) {
 export function groundShockArrival(rKm, soil = SOIL) {
   return (rKm * 1000) / soil.cP;
 }
+
+/**
+ * Vento de pico logo atrás da frente de choque (m/s) — G&D eq. 3.55.2:
+ *   u = (5p / 7P₀) · c₀ / √(1 + 6p / 7P₀)
+ * É esse vento (a pressão dinâmica) que arranca e arremessa os destroços.
+ */
+export function peakWindSpeed(psi) {
+  const x = psi / P0;
+  const c0 = CONFIG.blast.soundSpeed_kms * 1000;
+  return ((5 * x) / 7) * c0 / Math.sqrt(1 + (6 * x) / 7);
+}
+
+/** Paredes portantes (a parede segura o andar) × estrutura em pórtico (pilares e vigas). */
+export function isFrameMaterial(mat) {
+  return mat === 'concrete' || mat === 'steel';
+}
