@@ -15,7 +15,8 @@ import { CONFIG } from '../../config.js';
 import { smoothstep, clamp } from '../../physics/math.js';
 import { calibrateThermal, lapseFromN } from '../../physics/thermal_rise.js';
 
-const AUTO = { baixa: 'off', media: 'g64', alta: 'g96', ultra: 'g128' };
+// grids padrão por qualidade (g128 fica disponível manualmente para GPUs dedicadas)
+const AUTO = { baixa: 'off', media: 'g48', alta: 'g64', ultra: 'g96' };
 
 /** Vento de fundo na altura z (o mesmo perfil usado na advecção do grid). */
 function windAt(w, z) {
@@ -38,6 +39,7 @@ export class FluidController {
     this.key = null;
     this.active = false;
     this.kt = 1;
+    this.budget = 1;
     this.f = {
       wind: [0, 0], blast: new THREE.Vector4(), fire: new THREE.Vector4(), surfaceDust: 0,
       strat: new THREE.Vector3(), lid: new THREE.Vector2(), cool: new THREE.Vector2(), dustRate: 1, eps: 0.35,
@@ -135,12 +137,23 @@ export class FluidController {
     }
     const dTau = this.lastTau === null ? 0 : clamp(tau - this.lastTau, 0, 0.1);
     this.lastTau = tau;
+    // orçamento adaptativo: se os quadros ficam lentos, menos subpassos e iterações de pressão
+    const nowMs = performance.now();
+    if (this._lastMs) {
+      const fdt = Math.min(nowMs - this._lastMs, 250);
+      this.frameMs = this.frameMs ? this.frameMs * 0.92 + fdt * 0.08 : fdt;
+      const target = this.frameMs > 45 ? 0.55 : this.frameMs > 30 ? 0.8 : 1;
+      this.budget += (target - this.budget) * 0.05;
+    }
+    this._lastMs = nowMs;
+    this.solver.budget = this.budget;
     this.kt = this.accel + (this.ktMax - this.accel) * smoothstep(this.shockEnd, this.shockEnd + 5, tau);
     let dtPhys = dTau * this.kt;
     const s = this.solver;
     const hmin = Math.min(s.h.x, s.h.z);
     const vmax = Math.max(s.extent?.vmax || 0, 40);
-    const n = clamp(Math.ceil((dtPhys * vmax) / (2.5 * hmin)), 1, s.preset.maxSub);
+    const maxSub = this.budget < 0.7 ? 1 : this.budget < 0.9 ? Math.min(2, s.preset.maxSub) : s.preset.maxSub;
+    const n = clamp(Math.ceil((dtPhys * vmax) / (2.5 * hmin)), 1, maxSub);
     const dt = dtPhys / n;
     const fx = this.fx;
     for (let i = 0; i < n && dt > 0; i++) {
@@ -263,12 +276,14 @@ export class FluidController {
 
   info() {
     if (!this.active || !this.solver) return '';
+    const n = (v, d) => v.toFixed(d).replace('.', ',');
     const b = this.solver.box;
     const th = this.th;
     const dT = this.thermal.buoyancy(th).dTheta;
-    return `fluido ${this.solver.preset.label} · domínio ${(b.W / 1000).toFixed(1)} × ${(b.H / 1000).toFixed(1)} km · tempo ×${this.kt.toFixed(0)}`
-      + `<br>térmica: ${(th.z / 1000).toFixed(1)} km · sobe ${th.w.toFixed(0)} m/s · raio ${(th.a / 1000).toFixed(2)} km · ΔT ${dT.toFixed(dT < 10 ? 1 : 0)} K`
-      + ` · α ${this.thermal.alpha.toFixed(2)} · N ${this.thermal.N.toFixed(3)} s⁻¹`;
+    const eco = this.budget < 0.95 ? ` · modo econômico ${Math.round(this.budget * 100)}%` : '';
+    return `fluido ${this.solver.preset.label}${eco} · domínio ${n(b.W / 1000, 1)} × ${n(b.H / 1000, 1)} km · tempo ×${n(this.kt, 0)}`
+      + `<br>térmica: ${n(th.z / 1000, 1)} km · sobe ${n(th.w, 0)} m/s · raio ${n(th.a / 1000, 2)} km · ΔT ${n(dT, dT < 10 ? 1 : 0)} K`
+      + ` · α ${n(this.thermal.alpha, 2)} · N ${n(this.thermal.N, 3)} s⁻¹`;
   }
 
   /** Estado da térmica (para o painel de escalas). */

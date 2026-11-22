@@ -561,7 +561,8 @@ export class FluidSolver {
     m.divergence.uniforms.tVel.value = this.vel[0].texture;
     this._run(m.divergence, this.div);
     m.jacobi.uniforms.tDiv.value = this.div.texture;
-    for (let i = 0; i < this.preset.iters; i++) {
+    const iters = Math.max(8, Math.round(this.preset.iters * (this.budget ?? 1)));
+    for (let i = 0; i < iters; i++) {
       m.jacobi.uniforms.tP.value = this.pres[0].texture;
       this._run(m.jacobi, this.pres[1]);
       this._swap(this.pres);
