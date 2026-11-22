@@ -96,7 +96,7 @@ export function initControls(app, mapView) {
   $('bld-radius').addEventListener('change', (e) => { state.buildings.radiusM = Number(e.target.value); });
   $('bld-auto').checked = state.buildings.auto;
   $('bld-auto').addEventListener('change', (e) => { state.buildings.auto = e.target.checked; });
-  $('bld-load').addEventListener('click', () => app.loadBuildings(state.gz, state.buildings.radiusM));
+  $('bld-load').addEventListener('click', () => app.loadBuildings(state.gz, app.buildingRadius()));
   on('buildings-status', ({ text, kind }) => {
     const el = $('bld-status');
     el.textContent = text;

@@ -212,7 +212,11 @@ export const CONFIG = {
       'https://overpass.kumi.systems/api/interpreter',
       'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     ],
+    // os mesmos blocos vetoriais do mapa-base (OpenFreeMap, z14) — fonte principal dos prédios
+    tileJson: 'https://tiles.openfreemap.org/planet',
     defaultRadius_m: 1500,
+    // raio automático: cobre a zona de 3 psi (danos estruturais), limitado pela qualidade
+    autoRadius: { min_m: 1000, max_m: { baixa: 2500, media: 4000, alta: 6000, ultra: 8000 } },
     maxCount: { baixa: 8000, media: 20000, alta: 40000, ultra: 70000 },
     levelHeight_m: 3.2,
     defaultHeights: {

@@ -9,6 +9,7 @@ import { emit, on } from './util/events.js';
 import { computeEffects } from './physics/effects.js';
 import { haversineKm, destination } from './map/geo.js';
 import { fetchBuildings, parseBuildings } from './services/overpass.js';
+import { fetchMapBuildings } from './services/mapBuildings.js';
 import { countryAt } from './services/nominatim.js';
 import { unlock } from './game/achievements.js';
 import { HISTORIC_WEAPONS } from './data/weapons.js';
@@ -23,6 +24,7 @@ import { materialOf } from './physics/structures.js';
 export function createApp({ mapView, layers, scene, city, sim, cinema }) {
   const map = mapView.map;
   let loadCtrl = null;
+  let loadPromise = null;
   let orbitRaf = 0;
 
   // marcador do ponto zero (arrastável)
@@ -51,29 +53,66 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
       emit('click-mode', mode);
     },
 
-    /** Carrega prédios reais do OSM ao redor de `center`. */
-    async loadBuildings(center = state.gz, radiusM = state.buildings.radiusM) {
+    /** Raio de carregamento: o escolhido pelo usuário, ou automático (cobre a zona de 3 psi). */
+    buildingRadius(fx = computeEffects(simParams())) {
+      if (state.buildings.radiusM > 0) return state.buildings.radiusM;
+      const A = CONFIG.buildings.autoRadius;
+      const need = fx.radius.blast3 * 1000 * 1.15;
+      return Math.round(Math.min(A.max_m[state.quality] || A.max_m.media, Math.max(A.min_m, need)));
+    },
+
+    /** Os prédios carregados ainda servem para este alvo/raio? */
+    buildingsCover(center, radiusM) {
+      const b = state.buildings;
+      if (!b.center || !b.count) return false;
+      const off = haversineKm(b.center, center) * 1000;
+      return off + radiusM <= (b.loadedRadiusM || 0) * 1.05;
+    },
+
+    /**
+     * Carrega os prédios em volta de `center` e os torna destrutíveis.
+     * Fonte principal: os blocos vetoriais do próprio mapa (rápido); se falhar, Overpass.
+     */
+    loadBuildings(center = state.gz, radiusM = app.buildingRadius()) {
       if (loadCtrl) loadCtrl.abort();
       const ctrl = new AbortController();
       loadCtrl = ctrl;
       state.buildings.loading = true;
-      emit('buildings-status', { text: 'Carregando prédios do OpenStreetMap…', kind: 'busy' });
-      try {
+      state.buildings.loadingFor = { ...center };
+      emit('buildings-status', { text: 'Interceptando os prédios do mapa…', kind: 'busy' });
+      const max = CONFIG.buildings.maxCount[state.quality] || 20000;
+      const run = async () => {
         let list;
+        let fids = null;
+        let truncated = false;
+        let source = 'mapa';
+        let reach = radiusM;
         if (OFFLINE) {
           // edição artefato: prédios da cidade-modelo dentro do raio
           list = demoCity().buildings.filter((b) => haversineKm(center, { lng: b.outer[0][0], lat: b.outer[0][1] }) * 1000 <= radiusM);
+          source = 'cidade-modelo';
         } else {
-          const json = await fetchBuildings(center.lat, center.lng, radiusM, {
-            signal: ctrl.signal,
-            onStatus: (text) => emit('buildings-status', { text, kind: 'busy' }),
-          });
+          try {
+            const r = await fetchMapBuildings(center.lat, center.lng, radiusM, {
+              signal: ctrl.signal, maxCount: max,
+              onStatus: (text) => emit('buildings-status', { text, kind: 'busy' }),
+            });
+            ({ list, fids, truncated } = r);
+            if (truncated) reach = Math.min(radiusM, r.reachM);
+          } catch (e) {
+            if (ctrl.signal.aborted) throw e;
+            console.warn('[prédios] blocos do mapa indisponíveis, tentando a Overpass', e);
+            const json = await fetchBuildings(center.lat, center.lng, Math.min(radiusM, 3000), {
+              signal: ctrl.signal,
+              onStatus: (text) => emit('buildings-status', { text, kind: 'busy' }),
+            });
+            list = parseBuildings(json);
+            source = 'OpenStreetMap (Overpass)';
+          }
           if (ctrl.signal.aborted) return;
-          list = parseBuildings(json);
         }
-        const max = CONFIG.buildings.maxCount[state.quality] || 20000;
-        const truncated = list.length > max;
-        if (truncated) {
+        if (list.length > max) {
+          truncated = true;
           const d = (b) => {
             const [lng, lat] = b.outer[0];
             return (lng - center.lng) ** 2 * Math.cos((lat * Math.PI) / 180) ** 2 + (lat - center.lat) ** 2;
@@ -84,29 +123,34 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
         const n = city.setBuildings(list);
         emit('buildings-loaded', { list, center });
         if (state.terrain) setTimeout(() => city.applyTerrain(true), 300);
-        mapView.setHideStyleBuildings(n > 0);
+        // some do mapa só o que virou destrutível (pelo id); sem ids (Overpass), some tudo
+        mapView.setHideStyleBuildings(n > 0 ? (fids || true) : null);
         state.buildings.center = { ...center };
         state.buildings.count = n;
-        state.buildings.loadedRadiusM = radiusM;
+        state.buildings.loadedRadiusM = reach;
         emit('buildings-status', {
           text: n
-            ? `✔ ${fmtInt(n)} prédios ${OFFLINE ? 'da cidade-modelo' : 'reais'} carregados (raio ${fmtDist(radiusM / 1000)})${truncated ? ` — limitado pela qualidade "${state.quality}"` : ''}.`
-            : OFFLINE ? 'Fora da cidade-modelo: não há prédios aqui. Volte para perto do centro.' : 'Nenhum prédio mapeado nesta área do OpenStreetMap.',
+            ? `✔ ${fmtInt(n)} prédios ${source === 'mapa' ? 'do mapa' : `da ${source}`} prontos para a destruição (raio ${fmtDist(reach / 1000)})${truncated ? ` — limitado pela qualidade "${state.quality}"; além disso os prédios ficam só no chão (2D)` : ''}.`
+            : OFFLINE ? 'Fora da cidade-modelo: não há prédios aqui. Volte para perto do centro.' : 'Nenhum prédio mapeado nesta área.',
           kind: n ? 'ok' : 'warn',
         });
         if (n) unlock('cidade3d');
         sim.onBuildingsLoaded();
         map.triggerRepaint();
-      } catch (e) {
+      };
+      const p = run().catch((e) => {
         if (ctrl.signal.aborted) return;
         console.warn('[prédios]', e);
-        emit('buildings-status', { text: 'Falha ao consultar a Overpass API (servidor ocupado ou sem conexão). Tente de novo em instantes ou reduza o raio.', kind: 'err' });
-      } finally {
+        emit('buildings-status', { text: 'Não foi possível baixar os prédios (sem conexão ou servidor ocupado). Tente de novo em instantes.', kind: 'err' });
+      }).finally(() => {
         if (loadCtrl === ctrl) {
           state.buildings.loading = false;
           loadCtrl = null;
+          loadPromise = null;
         }
-      }
+      });
+      loadPromise = p;
+      return p;
     },
 
     clearBuildings() {
@@ -166,9 +210,16 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
       if (!state.gz) return emit('toast', { type: 'warn', text: 'Escolha um ponto no mapa primeiro.' });
       const params = simParams();
       const preview = computeEffects(params);
-      const needLoad = state.buildings.auto && !state.buildings.loading
-        && (!state.buildings.center || haversineKm(state.buildings.center, state.gz) > (state.buildings.radiusM / 1000) * 0.5);
-      if (needLoad) app.loadBuildings(state.gz, state.buildings.radiusM);
+      // intercepta os prédios do mapa ANTES de detonar (normalmente leva 1–3 s); se demorar demais,
+      // a explosão segue e os prédios recebem os danos assim que chegarem
+      const radiusM = app.buildingRadius(preview);
+      const needLoad = state.buildings.auto && !app.buildingsCover(state.gz, radiusM)
+        && !(state.buildings.loading && state.buildings.loadingFor && haversineKm(state.buildings.loadingFor, state.gz) < 0.05);
+      if (needLoad) app.loadBuildings(state.gz, radiusM);
+      if (loadPromise) {
+        emit('toast', { type: 'info', text: 'Preparando os prédios do mapa para a destruição…' });
+        await Promise.race([loadPromise, new Promise((r) => setTimeout(r, 8000))]);
+      }
       sim.stop();
       if (cinema?.active) await cinema.prepare(preview);
       else if (state.cinematic) await app.cinematic(preview);

@@ -61,7 +61,7 @@ void main() {
   float prog = 0.0;
   if (uTime >= 0.0 && t > 0.0 && lvl > 1.5) prog = smoothstep(0.0, uCollapse * (0.6 + seed * 0.9), t);
   // fração da altura que sobra após o colapso
-  float hf = lvl > 4.5 ? 0.035 : (lvl > 3.5 ? 0.17 : (lvl > 2.5 ? 0.52 : (lvl > 1.5 ? 0.94 : 1.0)));
+  float hf = lvl > 5.5 ? 0.0 : lvl > 4.5 ? 0.035 : (lvl > 3.5 ? 0.17 : (lvl > 2.5 ? 0.52 : (lvl > 1.5 ? 0.94 : 1.0)));
   vec2 away = A.xy - uGZ;
   float dist = length(away);
   away = dist > 0.01 ? away / dist : vec2(1.0, 0.0);
@@ -177,7 +177,7 @@ void main() {
 
   // coloração por nível de dano (opcional)
   if (uTint > 0.0 && hit) {
-    int li = int(vLevel + 0.5);
+    int li = min(int(vLevel + 0.5), 5);
     vec3 dc = uDamage[li];
     float k = uTint * smoothstep(0.0, 0.35, vT) * (li == 0 ? 0.0 : 0.7);
     col = mix(col, dc * (0.45 + 0.45 * diff + 0.25 * sky) * (rubble ? 0.8 : 1.0), k);
@@ -443,7 +443,10 @@ export class City {
       const resp = materialResponse(r.mat, psi, td);
       const glass = materialResponse('glass', psi, td);
       let lvl = Math.max(resp.level, Math.min(1, glass.level));
-      if (dKm < rfb && fx.hKm < rfb) lvl = 5;
+      // dentro da bola de fogo que toca o chão: vaporizado (não sobra nem entulho)
+      const vap = dKm < rfb && fx.hKm < rfb;
+      if (vap) lvl = 5;
+      r.vaporized = vap;
       r.resp = { ...resp, td, glassLevel: glass.level };
       const arr = fx.arrivalAt(dKm) / accel;
       const burn = fx.burnDegreeAt(dKm);
@@ -454,7 +457,7 @@ export class City {
       const levels = r.src.levels || Math.max(1, Math.round((r.top - r.base) / CONFIG.buildings.levelHeight_m));
       floorArea += r.area * levels;
       this.dataB[i * 4] = arr;
-      this.dataB[i * 4 + 1] = lvl;
+      this.dataB[i * 4 + 1] = r.vaporized ? 5.6 : lvl;
       this.dataB[i * 4 + 3] = burn;
     });
     this.texB.needsUpdate = true;

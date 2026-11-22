@@ -20,7 +20,7 @@ export class MapView {
   constructor(container, { center, zoom, basemap = 'liberty' }) {
     this.basemap = BASEMAPS[basemap] ? basemap : 'liberty';
     this.terrainOn = false;
-    this.hideBuildings = false;
+    this.hideBuildings = null; // ids (do bloco vetorial) dos prédios trocados por versões destrutíveis
     this.styleLoadedOnce = false;
     this._styleLoaded = false;
 
@@ -85,18 +85,38 @@ export class MapView {
     if (!BASEMAPS[key]) return;
     this.basemap = key;
     this._armFallbackTimer();
+    this._origFilters = {};
     this.map.setStyle(BASEMAPS[key].style, { diff: false });
   }
 
-  /** Oculta os prédios 3D do próprio estilo quando os prédios destrutíveis estão carregados. */
+  /**
+   * "Intercepta" os prédios 3D do próprio mapa: os que foram trocados por versões destrutíveis
+   * somem da camada do estilo (filtro por id); os demais continuam lá.
+   * @param {number[]|boolean|null} hide lista de ids, `true` (esconde todos) ou null/false (mostra todos)
+   */
   setHideStyleBuildings(hide) {
     this.hideBuildings = hide;
     const style = this.map.getStyle();
     if (!style) return;
+    this._origFilters = this._origFilters || {};
     for (const l of style.layers) {
-      if (l['source-layer'] === 'building' && (l.type === 'fill-extrusion' || l.type === 'fill')) {
-        const vis = hide && l.type === 'fill-extrusion' ? 'none' : 'visible';
-        try { this.map.setLayoutProperty(l.id, 'visibility', vis); } catch { /* ignore */ }
+      if (l['source-layer'] !== 'building' || l.type !== 'fill-extrusion') continue;
+      if (!(l.id in this._origFilters)) this._origFilters[l.id] = l.filter ?? null;
+      const orig = this._origFilters[l.id];
+      try {
+        if (Array.isArray(hide) && hide.length) {
+          // "match" usa tabela de dispersão: rápido mesmo com dezenas de milhares de ids
+          const ids = [...new Set(hide.filter((v) => Number.isInteger(v) && v >= 0))];
+          const notMine = ['match', ['to-number', ['id']], ids, false, true];
+          this.map.setFilter(l.id, orig ? ['all', orig, notMine] : notMine);
+          this.map.setLayoutProperty(l.id, 'visibility', 'visible');
+        } else {
+          this.map.setFilter(l.id, orig);
+          this.map.setLayoutProperty(l.id, 'visibility', hide === true ? 'none' : 'visible');
+        }
+      } catch (e) {
+        console.warn('[mapa] não foi possível filtrar os prédios do estilo', e);
+        try { this.map.setLayoutProperty(l.id, 'visibility', hide ? 'none' : 'visible'); } catch { /* ignore */ }
       }
     }
   }

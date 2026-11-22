@@ -11,8 +11,11 @@ OpenStreetMap são renderizados em 3D e **destruídos em tempo (acelerado) real*
 
 - **Mapa real**: MapLibre GL com estilos vetoriais públicos do OpenFreeMap (estilo "Google Maps"), satélite Esri,
   OpenStreetMap padrão, relevo 3D (AWS Terrain Tiles), céu e atmosfera. Busca por nome (Nominatim).
-- **Cidade destrutível**: prédios reais via Overpass API (`building=*`), com altura/andares do OSM, desenhados em
-  WebGL (three.js dentro do MapLibre). Na detonação, cada prédio:
+- **Cidade destrutível**: os prédios do próprio mapa são "interceptados" — o app baixa os mesmos blocos
+  vetoriais do OpenFreeMap (z14) que o mapa desenha, separa cada prédio, esconde os originais (pelo id) e
+  coloca no lugar cópias destrutíveis em WebGL (three.js dentro do MapLibre). Acontece sozinho ao escolher
+  o alvo e leva ~1–3 s; o raio é automático (cobre a zona de 3 psi), limitado pela qualidade. Se os blocos
+  falharem, a Overpass API é usada como reserva. Na detonação, cada prédio:
   - muda de cor conforme a sobrepressão (≥20, 10–20, 5–10, 3–5, 1–3 psi);
   - colapsa, inclina ou esfarela de acordo com o dano, no instante em que a onda chega;
   - solta destroços em **voxels** com trajetória balística (dezenas de milhares de blocos na GPU);
@@ -102,7 +105,7 @@ src/
     thermal.js  radiation.js  fireball.js  fallout.js  casualties.js
     effects.js             agrega todos os efeitos de uma detonação
   map/                     MapLibre: estilos, relevo, camadas 2D, geodésia
-  services/                Overpass (prédios), Nominatim (busca/país), Open-Meteo (vento)
+  services/                prédios do mapa (blocos vetoriais), Overpass (reserva), Nominatim, Open-Meteo
   render/                  three.js: cidade destrutível, voxels, partículas, bola de fogo,
                            cogumelo, onda de choque, efeitos no chão, ogiva estilizada (SVG)
   cinema/                  modo cinema: CinemaView (motor), worlds (Google/Cesium/satélite+OSM),
@@ -135,7 +138,7 @@ Detalhes, fontes e a comparação com valores publicados estão nas abas **A Fí
 ## Serviços externos (públicos, sem chave)
 
 - Mapas: [OpenFreeMap](https://openfreemap.org), [OpenStreetMap](https://www.openstreetmap.org/copyright), Esri World Imagery, AWS Terrain Tiles
-- Prédios: [Overpass API](https://overpass-api.de) — use raios moderados; servidores públicos podem estar ocupados
+- Prédios: blocos vetoriais do [OpenFreeMap](https://openfreemap.org) (os mesmos do mapa); reserva: [Overpass API](https://overpass-api.de)
 - Busca e país: [Nominatim](https://nominatim.org) — respeitamos o limite de 1 requisição/s
 - Vento: [Open-Meteo](https://open-meteo.com)
 

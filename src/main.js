@@ -126,7 +126,24 @@ if (OFFLINE) {
       }
     });
   });
-} else if (!load('seenMenu', false)) {
+} else {
+  // intercepta os prédios do mapa sozinho quando o alvo muda (e logo ao abrir)
+  let tmr = null;
+  const autoLoad = () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(() => {
+      if (!state.buildings.auto || !state.gz) return;
+      const R = app.buildingRadius();
+      if (!app.buildingsCover(state.gz, R) && !(state.buildings.loading && state.buildings.loadingFor
+        && Math.hypot(state.buildings.loadingFor.lat - state.gz.lat, state.buildings.loadingFor.lng - state.gz.lng) < 1e-5)) {
+        app.loadBuildings(state.gz, R);
+      }
+    }, 700);
+  };
+  on('gz-changed', autoLoad);
+  on('style-ready', autoLoad);
+}
+if (!OFFLINE && !load('seenMenu', false)) {
   // menu inicial com os 3 modos de escolha da arma (só na primeira visita)
   save('seenMenu', true);
   showView('armas');
