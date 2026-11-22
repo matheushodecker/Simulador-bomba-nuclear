@@ -78,6 +78,16 @@ npm run preview    # serve o dist/ localmente
 O `dist/` usa caminhos relativos e funciona no GitHub Pages, Netlify ou qualquer servidor estático.
 Não é preciso nenhuma chave de API.
 
+### Publicar na Vercel
+
+1. Em vercel.com → **Add New… → Project**, importe este repositório do GitHub.
+2. A Vercel detecta o Vite sozinha: *Build Command* `npm run build`, *Output Directory* `dist`. Não mude nada.
+3. Clique em **Deploy**. Cada novo push no branch gera uma nova versão.
+
+Não configure variáveis de ambiente com chaves: tudo que começa com `VITE_` vai para o JavaScript
+público do site. Para as cidades fotorrealistas, cole a chave no próprio app (fica só no seu
+navegador) e, no console do Google/Cesium, restrinja a chave ao domínio `*.vercel.app` do seu projeto.
+
 ## Organização do código
 
 ```
