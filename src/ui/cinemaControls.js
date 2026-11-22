@@ -59,6 +59,13 @@ export function initCinemaControls({ cinema, mapView }) {
     emit('toast', { type: 'ok', text: 'Chave salva neste navegador. Carregando cidades 3D…' });
     if (state.cinema.active) cinema.setWorld(); else setActive(true);
   });
+  const fl = $('cinema-fluid');
+  fl.value = state.cinema.fluid;
+  fl.addEventListener('change', () => {
+    state.cinema.fluid = fl.value;
+    savePrefs();
+    emit('toast', { type: 'info', text: 'A nova configuração de fluidos vale a partir da próxima detonação.' });
+  });
   const time = $('cinema-time');
   time.value = state.cinema.timeOfDay;
   time.addEventListener('change', () => {

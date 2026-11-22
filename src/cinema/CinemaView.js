@@ -21,6 +21,7 @@ import { AerialPerspectiveEffect, ShockRippleEffect } from './effects.js';
 import { createDestructionUniforms, fillLut, buildHeightGrid } from './destruction.js';
 import { TilesWorld, FallbackWorld, metersPerDegree } from './worlds.js';
 import { PhysicsDebris } from './physicsDebris.js';
+import { FluidController } from './fluid/FluidController.js';
 import { cloudState } from '../render/cloudModel.js';
 import { City } from '../render/city.js';
 import { Debris } from '../render/debris.js';
@@ -94,6 +95,7 @@ export class CinemaView {
     this.city = null;
     this.physics = new PhysicsDebris();
     this.scene.add(this.physics.object3d);
+    this.fluid = new FluidController(renderer);
 
     // luz da bola de fogo
     this.spot = new THREE.SpotLight(0xffd2a0, 0, 0, 1.45, 0.6, 0);
@@ -379,6 +381,7 @@ export class CinemaView {
     if (this.world?.kind === 'tiles' && !this.grid) this._measureCity(fx);
     this._applyFxToBuildings();
     this._preparePhysics();
+    this.fluid.start(fx, accel, this.sim.params, this.fluid.resolveKey(this.state));
     const down = (((this.sim.params?.wind?.fromDeg ?? 270) + 180) % 360) * (Math.PI / 180);
     const ws = (this.sim.params?.wind?.speedKmh ?? 24) / 3.6;
     this.windENU = [Math.sin(down) * ws * 4, Math.cos(down) * ws * 4];
@@ -458,6 +461,7 @@ export class CinemaView {
 
   onClear() {
     this.physics?.dispose();
+    this.fluid?.stop();
     this.fx = null;
     this.grid = null;
     this.cine = null;
@@ -586,6 +590,7 @@ export class CinemaView {
     const fx = this.fx;
     if (!fx || tau < 0) {
       this.vol.enabled = false;
+      this.vol.uniforms.uUseFluid.value = 0;
       this.spot.intensity = 0;
       this.point.intensity = 0;
       this.aerial.uniforms.get('uFlash').value = 0;
@@ -645,6 +650,8 @@ export class CinemaView {
     vu.uDust.value = cs.surface ? 1 : 0.25;
     vu.uCapAmt.value = cs.appear;
     vu.uEmission.value = reduce ? 12 : 42;
+    // simulação de fluidos (Navier-Stokes + termodinâmica) no lugar do modelo procedural
+    const fluidOn = this.fluid.update(tau) && this.fluid.bind(vu);
 
     // onda de choque: refração + nuvem de condensação
     const tPhys = tau * this.accel;
@@ -673,6 +680,14 @@ export class CinemaView {
     const settleAmt = 0.45 * smoothstep(0.5, 3, tau) * (1 - smoothstep(90, 240, tau)) * (cs.surface ? 1.3 : 1);
     vu.uDustA.value.set(frontM, Math.max(30, frontM * 0.1), Math.min(400, (20 + 0.02 * frontM) * Math.min(scale, 2.5)), wallAmt);
     vu.uDustB.value.set(settleR, (8 + 55 * (1 - Math.exp(-tau / 15))) * scale, settleR > 10 ? settleAmt : 0, Math.max(frontM * (wallAmt > 0 ? 1.08 : 0), settleR) + 60);
+    if (fluidOn) {
+      // a poeira e a nuvem agora vêm do fluido simulado
+      const h = this.fluid.solver.h;
+      vu.uMisc.value.set(0, cs.late, Math.max(h.x, h.z) * 1.4, 1.4);
+      vu.uDustA.value.w = 0;
+      vu.uDustB.value.z = 0;
+      vu.uEmission.value = reduce ? 10 : 30;
+    }
 
     if (this.city) {
       this.city.lightScale = Math.max(0.1, p.ambient);

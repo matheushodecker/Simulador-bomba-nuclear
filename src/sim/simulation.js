@@ -175,6 +175,7 @@ export class Simulation {
     const arrCam = fx.arrivalAt(dc);
     if (tPhys < arrCam && dc < fx.radius.blast1 * 3) parts.push(`<span>🔇 O som chega ao centro da tela em ${fmtTime(arrCam - tPhys)}</span>`);
     parts.push(`<span class="muted">animação ${this.accel <= 1.01 ? 'em tempo real' : `acelerada ×${fmtNum(this.accel, this.accel < 10 ? 1 : 0)}`}</span>`);
+    if (this.cinemaActive && this.cinema?.fluid?.active) parts.push(`<span class="muted">${this.cinema.fluid.info()}</span>`);
     this.hudEl.innerHTML = parts.join('');
   }
 
