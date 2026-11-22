@@ -79,25 +79,57 @@ uniform float uWilson;
 uniform float uWilsonLight;
 uniform float uGroundY;
 uniform vec2 uCenterUv;
+uniform vec2 uReflect;  // raio extra da onda refletida (m), intensidade
+uniform vec3 uStem;     // raio do tronco de Mach no solo (m), altura do ponto triplo (m), intensidade
 
-float rimAt(vec2 uv, out vec3 hitP) {
+vec3 rayDir(vec2 uv) {
   vec4 v = uProjInv * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
-  vec3 rd = normalize((mat3(uCamWorld) * (v.xyz / v.w)));
-  vec3 oc = uCenter - uCamPos;
+  return normalize((mat3(uCamWorld) * (v.xyz / v.w)));
+}
+// contorno (silhueta) de uma esfera de raio R em torno de c
+float sphereRim(vec3 rd, vec3 c, float R, out vec3 hitP) {
+  vec3 oc = c - uCamPos;
   float tc = dot(oc, rd);
   vec3 closest = uCamPos + rd * tc;
-  float dperp = length(closest - uCenter);
   hitP = closest;
   if (tc < 0.0) return 0.0;
-  float x = (dperp - uRadius) / uWidth;
+  float x = (length(closest - c) - R) / uWidth;
   return exp(-x * x);
+}
+float rimAt(vec2 uv, out vec3 hitP) { return sphereRim(rayDir(uv), uCenter, uRadius, hitP); }
+
+// onda completa: incidente + refletida (centro na "imagem" abaixo do chão) + tronco de Mach
+float waveAt(vec2 uv, out vec3 hitP) {
+  vec3 rd = rayDir(uv);
+  float r = sphereRim(rd, uCenter, uRadius, hitP);
+  if (hitP.y < uGroundY - 5.0) r = 0.0;
+  if (uReflect.y > 0.0) {
+    vec3 hp2;
+    vec3 mc = vec3(uCenter.x, 2.0 * uGroundY - uCenter.y, uCenter.z);
+    float r2 = sphereRim(rd, mc, uRadius + uReflect.x, hp2);
+    // a refletida só existe acima do chão e atrás da incidente
+    if (hp2.y > uGroundY && length(hp2 - uCenter) < uRadius) r = max(r, r2 * uReflect.y);
+  }
+  if (uStem.z > 0.0 && uStem.y > 1.0) {
+    // silhueta do "cilindro" do tronco de Mach: frente vertical do chão até o ponto triplo
+    vec2 o = uCamPos.xz - uCenter.xz;
+    vec2 d2 = rd.xz;
+    float t = -dot(o, d2) / max(dot(d2, d2), 1e-6);
+    if (t > 0.0) {
+      vec3 p = uCamPos + rd * t;
+      float x = (length(p.xz - uCenter.xz) - uStem.x) / uWidth;
+      float hm = smoothstep(uGroundY - 2.0, uGroundY + 2.0, p.y) * (1.0 - smoothstep(uGroundY + uStem.y * 0.85, uGroundY + uStem.y, p.y));
+      r = max(r, exp(-x * x) * hm * uStem.z);
+    }
+  }
+  return r;
 }
 
 void mainUv(inout vec2 uv) {
   if (uStrength <= 0.0) return;
   vec3 hp;
-  float r = rimAt(uv, hp);
-  if (r < 0.002 || hp.y < uGroundY - 5.0) return;
+  float r = waveAt(uv, hp);
+  if (r < 0.002) return;
   vec2 dir = uv - uCenterUv;
   float len = length(dir);
   if (len > 1e-4) uv -= dir / len * r * uStrength * 0.012;
@@ -131,6 +163,8 @@ export class ShockRippleEffect extends Effect {
         ['uWilsonLight', new THREE.Uniform(1)],
         ['uGroundY', new THREE.Uniform(0)],
         ['uCenterUv', new THREE.Uniform(new THREE.Vector2(0.5, 0.5))],
+        ['uReflect', new THREE.Uniform(new THREE.Vector2())],
+        ['uStem', new THREE.Uniform(new THREE.Vector3())],
       ]),
     });
   }

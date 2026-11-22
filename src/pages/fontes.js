@@ -17,6 +17,17 @@ export function renderFontes(el, ctx, first) {
         <li><b>U.S. Congress, Office of Technology Assessment (1979).</b> <i>The Effects of Nuclear War</i>. <a href="https://ota.fas.org/reports/7906.pdf" target="_blank" rel="noopener">ota.fas.org/reports/7906.pdf</a> — mortalidade por faixa de sobrepressão.</li>
         <li><b>U.S. Army FM 8-9</b>, Parte I, Cap. 3 (efeitos nucleares). <a href="https://nuke.fas.org/guide/usa/doctrine/dod/fm8-9/1ch3.htm" target="_blank" rel="noopener">nuke.fas.org</a>.</li>
       </ul>
+      <h2>Simulação no ambiente (modo cinema)</h2>
+      <ul>
+        <li><b>Stam, J. (1999).</b> "Stable Fluids". <i>SIGGRAPH 99</i> — método de fluidos incompressíveis usado no grid da GPU.</li>
+        <li><b>Fedkiw, R., Stam, J. &amp; Jensen, H. W. (2001).</b> "Visual Simulation of Smoke". <i>SIGGRAPH 2001</i> — empuxo e confinamento de vorticidade.</li>
+        <li><b>Selle, A. et al. (2008).</b> "An Unconditionally Stable MacCormack Method". <i>J. Sci. Comput.</i> 35 — advecção de 2ª ordem com limitador.</li>
+        <li><b>Morton, B. R., Taylor, G. I. &amp; Turner, J. S. (1956).</b> "Turbulent gravitational convection from maintained and instantaneous sources". <i>Proc. R. Soc. A</i> 234 — modelo integral da térmica (subida da nuvem).</li>
+        <li><b>Hill, M. J. M. (1894).</b> "On a spherical vortex". <i>Phil. Trans. R. Soc. A</i> 185 — vórtice esférico usado para acoplar a térmica ao grid.</li>
+        <li><b>Kinney, G. F. &amp; Graham, K. J. (1985).</b> <i>Explosive Shocks in Air</i>, 2ª ed. Springer — duração da fase positiva.</li>
+        <li><b>Biggs, J. M. (1964).</b> <i>Introduction to Structural Dynamics</i>. McGraw-Hill — oscilador de 1 grau de liberdade e fator de carga dinâmica.</li>
+        <li>Glasstone &amp; Dolan (1977): §2.110 (temperatura da bola de fogo), §2.16 (cor da nuvem), §3.25–3.34 (reflexão de Mach), §3.56 (reflexão normal), §7.85–7.88 (pulso térmico no tempo), cap. 5 (danos por tipo de estrutura).</li>
+      </ul>
       <h2>História</h2>
       <ul>
         <li><b>Atomic Heritage Foundation / National Museum of Nuclear Science &amp; History.</b> <a href="https://ahf.nuclearmuseum.org/" target="_blank" rel="noopener">ahf.nuclearmuseum.org</a> — histórico das armas e testes (incl. Tsar Bomba).</li>

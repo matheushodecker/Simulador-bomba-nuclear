@@ -88,3 +88,62 @@ describe('pulso térmico no tempo', () => {
     expect(thermalPulseFraction(3)).toBeCloseTo(acc / (Math.PI / Math.SQRT2), 3);
   });
 });
+
+import {
+  normalReflectionFactor, reflectionRegime, machStartKm, triplePointHeightKm, positivePhaseSeconds,
+  dynamicLoadFactor, materialResponse, groundParticleVelocity, materialOf,
+} from '../src/physics/structures.js';
+
+describe('onda de choque no ambiente', () => {
+  it('reflexão normal: 2× (fraca) até 8× (forte)', () => {
+    expect(normalReflectionFactor(0.01)).toBeCloseTo(2, 2);
+    expect(normalReflectionFactor(1e6)).toBeGreaterThan(7.9);
+    expect(normalReflectionFactor(1e6)).toBeLessThanOrEqual(8);
+  });
+  it('regime: regular perto do marco zero, Mach além de ~40°', () => {
+    expect(reflectionRegime(0.1, 0.6, 0.13)).toBe('regular');
+    expect(reflectionRegime(1.0, 0.6, 0.13)).toBe('mach');
+    expect(reflectionRegime(1.0, 0.0, 0.13)).toBe('superficie');
+    expect(machStartKm(1)).toBeCloseTo(Math.tan((40 * Math.PI) / 180), 6);
+  });
+  it('ponto triplo nasce no início da reflexão de Mach e sobe com a distância', () => {
+    const h = 0.6;
+    const sM = h / Math.cos((40 * Math.PI) / 180);
+    expect(triplePointHeightKm(sM * 0.99, h, 5)).toBe(0);
+    const a = triplePointHeightKm(1.2, h, 5);
+    const b = triplePointHeightKm(2.0, h, 5);
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(a);
+  });
+  it('fase positiva escala com W^⅓ (mesma distância escalada)', () => {
+    const t1 = positivePhaseSeconds(1.0, 1);
+    const t1000 = positivePhaseSeconds(10.0, 1000);
+    expect(t1000 / t1).toBeCloseTo(10, 1);
+    expect(t1).toBeGreaterThan(0.1);
+    expect(t1).toBeLessThan(0.6);
+  });
+  it('fator de carga dinâmica: π·t_d/T (impulsivo) → 2 (quase estático)', () => {
+    expect(dynamicLoadFactor(0.01) / (Math.PI * 0.01)).toBeCloseTo(1, 1);
+    expect(dynamicLoadFactor(1000)).toBeGreaterThan(1.98);
+    expect(dynamicLoadFactor(1000)).toBeLessThanOrEqual(2.0001);
+  });
+  it('ordem dos materiais sob a mesma onda: vidro < madeira ≤ alvenaria < concreto', () => {
+    const psi = 6; const td = 0.6;
+    const lv = (m) => materialResponse(m, psi, td).level;
+    expect(lv('glass')).toBeGreaterThanOrEqual(lv('wood'));
+    expect(lv('wood')).toBeGreaterThanOrEqual(lv('masonry'));
+    expect(lv('masonry')).toBeGreaterThan(lv('concrete'));
+  });
+  it('pulso curto (explosão pequena) danifica menos estruturas rígidas e lentas', () => {
+    expect(materialResponse('steel', 20, 0.01).level).toBeLessThan(materialResponse('steel', 20, 1).level);
+  });
+  it('vibração do solo: v = p/(ρc)', () => {
+    expect(groundParticleVelocity(10)).toBeCloseTo((10 * 6894.76) / (1800 * 900), 6);
+  });
+  it('material provável pelo tipo e pela tag', () => {
+    expect(materialOf({ material: 'wood' })).toBe('wood');
+    expect(materialOf({ kind: 'warehouse', height: 8 })).toBe('steel');
+    expect(materialOf({ kind: 'office', height: 80 })).toBe('concrete');
+    expect(materialOf({ kind: 'house', height: 6 })).toBe('masonry');
+  });
+});

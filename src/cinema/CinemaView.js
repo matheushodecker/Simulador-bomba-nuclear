@@ -32,6 +32,8 @@ import { emit } from '../util/events.js';
 import { smoothstep, clamp, lerp } from '../physics/math.js';
 import { damageInfo } from '../physics/blast.js';
 import { fmtDist, fmtSig, fmtTime } from '../util/format.js';
+import { structureHtml } from '../ui/structureInfo.js';
+import { triplePointHeightKm, groundShockArrival, groundParticleVelocity } from '../physics/structures.js';
 
 const QUALITY = {
   baixa: { pr: 0.75, vol: 0.33, steps: 40, light: 3, ao: false, shadow: 0, err: 24, smaa: false },
@@ -652,7 +654,17 @@ export class CinemaView {
     const [e, n] = this.worldToENU(this.camera.position);
     const dKm = Math.hypot(e, n) / 1000;
     const arr = this.fx.arrivalAt(dKm) / this.accel;
-    if (tau < arr) return;
+    // explosão no solo: tremor que viaja pelo terreno chega antes (pequeno, mas perceptível)
+    if (tau < arr) {
+      if (this.fx.hKm > this.fx.radius.fireball) return;
+      const tg = groundShockArrival(dKm) / this.accel;
+      if (tau < tg || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const v = groundParticleVelocity(this.fx.psiAt(dKm)) * 3; // fonte direta ≈ algumas vezes a induzida pelo ar
+      const amp = clamp(v * 0.05, 0.0005, 0.004) * Math.exp(-(tau - tg) * 1.5);
+      this.camera.rotateX((Math.random() - 0.5) * amp);
+      this.camera.rotateZ((Math.random() - 0.5) * amp);
+      return;
+    }
     const k = tau - arr;
     if (k > 1.6) { this.shakeDone = true; return; }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -785,6 +797,14 @@ export class CinemaView {
     su.get('uGroundY').value = this.groundY;
     const sc = center.clone().project(this.camera);
     su.get('uCenterUv').value.set(sc.x * 0.5 + 0.5, sc.y * 0.5 + 0.5);
+    // reflexão no solo: refletida (um pouco mais rápida) e, além de ~40°, o tronco de Mach
+    const elevated = fx.hKm > fx.radius.fireball;
+    const hM = fx.hKm * 1000;
+    const yT = elevated ? triplePointHeightKm(sKm, fx.hKm, psi) * 1000 : 0;
+    const delta = elevated && yT > 0 ? Math.sqrt(sKm * 1000 * sKm * 1000 + 4 * hM * yT) - sKm * 1000 : 0;
+    su.get('uReflect').value.set(delta, elevated && sKm > fx.hKm ? 0.7 : 0);
+    su.get('uStem').value.set(rKm * 1000, yT, yT > 0 ? 1.3 : 0);
+    this.machInfo = elevated ? { yT, rKm, regime: yT > 0 ? 'mach' : sKm > fx.hKm ? 'regular' : 'livre' } : null;
 
     // poeira rasteira: muro que acompanha a frente de choque + camada sobre a área destruída
     const scale = clamp(Math.cbrt(fx.yieldKt) / 2.5, 0.6, 6) * (cs.surface ? 1.3 : 1);
@@ -879,11 +899,16 @@ export class CinemaView {
         <tr><td>Fluência térmica</td><td class="num">${q > 1000 ? '> 1000' : fmtSig(q, 2)} cal/cm²</td></tr>
         <tr><td>Radiação inicial</td><td class="num">${rem > 1e5 ? '> 100.000' : fmtSig(rem, 2)} rem</td></tr>
       </table>
-      <div><span class="lvl" style="background:${di.color}">${di.label}</span> <span class="small">${di.desc}</span></div>`;
+      <div><span class="lvl" style="background:${di.color}">${di.label}</span> <span class="small">${di.desc}</span></div>
+      ${structureHtml(fx, d)}`;
     const r = this.host.getBoundingClientRect();
-    box.style.left = `${Math.min(r.width - 300, e.clientX - r.left + 12)}px`;
-    box.style.top = `${Math.min(r.height - 220, e.clientY - r.top + 12)}px`;
     box.hidden = false;
+    const place = () => {
+      box.style.left = `${Math.max(8, Math.min(r.width - box.offsetWidth - 8, e.clientX - r.left + 12))}px`;
+      box.style.top = `${Math.max(8, Math.min(r.height - box.offsetHeight - 8, e.clientY - r.top + 12))}px`;
+    };
+    place();
+    box.querySelector('details')?.addEventListener('toggle', place);
     box.querySelector('button').onclick = () => { box.hidden = true; };
   }
 

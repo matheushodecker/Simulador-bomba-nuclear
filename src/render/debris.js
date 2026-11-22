@@ -124,9 +124,11 @@ export class Debris {
     const want = [];
     let total = 0;
     for (const r of buildings) {
-      if (!(r.level >= 2)) { want.push(0); continue; }
+      // vidros quebram bem antes da estrutura: estilhaços já a partir do nível 1
+      if (!(r.level >= 1)) { want.push(0); continue; }
       const vol = r.area * (r.top - r.base);
-      const per = r.level === 5 ? 10 + vol / 700 : r.level === 4 ? 6 + vol / 1400 : r.level === 3 ? 3 + vol / 3000 : 1 + vol / 9000;
+      const glass = r.level === 1 ? Math.min(6, 1 + (r.top - r.base) / 12) : 0;
+      const per = r.level === 5 ? 10 + vol / 700 : r.level === 4 ? 6 + vol / 1400 : r.level === 3 ? 3 + vol / 3000 : r.level === 2 ? 1 + vol / 9000 : glass;
       const n = Math.min(70, Math.round(per));
       want.push(n);
       total += n;
@@ -149,8 +151,18 @@ export class Debris {
       const ax = r.c[0] - gz[0];
       const ay = r.c[1] - gz[1];
       const ad = Math.hypot(ax, ay) || 1;
-      const sizeScale = Math.min(2.2, Math.max(0.6, Math.sqrt(r.area) / 14));
-      const speedBase = Math.min(150, 3 + r.psi * 3.2) * (r.level === 2 ? 0.25 : r.level === 3 ? 0.6 : 1);
+      // cada material se parte de um jeito: vidro em cacos pequenos e rápidos; madeira em lascas;
+      // alvenaria/concreto em blocos; aço em peças longas que entortam (pouco voam)
+      const mat = r.mat || 'masonry';
+      const MAT = {
+        glass: { size: 0.25, speed: 1.6, colors: [[0.55, 0.68, 0.72], [0.7, 0.8, 0.84]] },
+        wood: { size: 0.7, speed: 1.2, colors: [[0.45, 0.32, 0.2], [0.6, 0.45, 0.3]] },
+        masonry: { size: 1, speed: 0.9, colors: [[0.62, 0.4, 0.3], [0.7, 0.66, 0.6]] },
+        concrete: { size: 1.25, speed: 0.75, colors: [[0.62, 0.61, 0.58], [0.5, 0.5, 0.48]] },
+        steel: { size: 1.1, speed: 0.6, colors: [[0.42, 0.44, 0.46], [0.3, 0.3, 0.32]] },
+      }[r.level === 1 ? 'glass' : mat] || { size: 1, speed: 1, colors: [[0.62, 0.61, 0.58]] };
+      const sizeScale = Math.min(2.2, Math.max(0.6, Math.sqrt(r.area) / 14)) * MAT.size;
+      const speedBase = Math.min(150, 3 + r.psi * 3.2) * (r.level === 2 ? 0.25 : r.level === 3 ? 0.6 : 1) * MAT.speed;
       const hot = r.dKm < fireballKm * 2.5 ? 1 : 0;
       for (let q = 0; q < n && k < N; q++) {
         let px = r.c[0]; let py = r.c[1];
@@ -170,8 +182,8 @@ export class Debris {
         const size = (0.5 + rand() * 2.4) * sizeScale;
         iP.set([r.arrival + rand() * 0.25 + zFrac * 0.12, size, rand(), hot * (0.5 + 0.5 * rand())], k * 4);
         const shade = 0.55 + 0.45 * rand();
-        const concrete = rand() < 0.45;
-        const c = concrete ? [0.62, 0.61, 0.58] : r.src.color;
+        const own = rand() < 0.45;
+        const c = own && r.level > 1 ? r.src.color : MAT.colors[Math.floor(rand() * MAT.colors.length)];
         const charred = r.burn >= 3 ? 0.75 : 1;
         iColor.set([c[0] * shade * charred, c[1] * shade * charred, c[2] * shade * charred], k * 3);
         k++;

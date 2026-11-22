@@ -155,6 +155,7 @@ function makeRecord(id, tags, outer, holes) {
     kind,
     category: cat,
     name: tags.name || null,
+    material: tags['building:material'] || tags['building:facade:material'] || null,
     levels,
     height,
     minHeight,

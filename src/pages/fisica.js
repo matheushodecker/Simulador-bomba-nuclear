@@ -9,6 +9,8 @@ import { NUCLIDES, semfBA } from '../data/nuclides.js';
 import { computeEffects } from '../physics/effects.js';
 import { blastRadius, makeOverpressureFn, shockSpeed } from '../physics/blast.js';
 import { decayFactor } from '../physics/fallout.js';
+import { thermalPulsePower, thermalPulseFraction } from '../physics/thermal.js';
+import { dynamicLoadFactor } from '../physics/structures.js';
 import { lineChart, hBarLog } from '../ui/chart.js';
 import { fmtSci, fmtYield, fmtSig, fmtDist, fmtNum, fmtTime } from '../util/format.js';
 
@@ -29,6 +31,7 @@ export function renderFisica(el, ctx, first) {
       <nav class="toc">
         <a href="#f-emc">1. E = mc²</a><a href="#f-ligacao">2. Energia de ligação</a><a href="#f-cadeia">3. Reação em cadeia</a>
         <a href="#f-fissao-fusao">4. Fissão × fusão</a><a href="#f-efeitos">5. Física dos efeitos</a><a href="#f-escala">6. Leis de escala</a>
+        <a href="#f-ambiente">7. Simulação no ambiente</a>
       </nav>
     </header>
 
@@ -218,6 +221,63 @@ export function renderFisica(el, ctx, first) {
       <div id="scale-chart"></div>
       <div class="formula-box" id="formula-box"></div>
     </section>
+
+    <section class="phys-sec" id="f-ambiente">
+      <h2>7. Simulação dos efeitos no ambiente</h2>
+      <p>No modo cinema, além das leis de escala, o simulador resolve equações da física do ar, do calor e das estruturas.
+      Aqui está o que cada parte faz — e onde ela é uma aproximação.</p>
+      <div class="effect-grid">
+        <article>
+          <h3>🌪️ Fluidos (Navier–Stokes)</h3>
+          <p>O ar em volta da explosão é um grid 3D na GPU (até 128 × 128 × 160 células) resolvido pelo método <i>stable fluids</i>:
+          advecção semi-lagrangiana (com correção de MacCormack), projeção de pressão para manter ∇·u = 0, e confinamento de vorticidade
+          para não perder os redemoinhos.</p>
+          <p class="formula">∂u/∂t + (u·∇)u = −∇p/ρ + b ẑ + f &nbsp;&nbsp; ∇·u = 0</p>
+          <p class="muted small">É o que faz a fumaça girar no anel de vórtice, a haste ser sugada para cima e a nuvem tombar com o vento (que aumenta com a altura).</p>
+        </article>
+        <article>
+          <h3>🎈 Subida da nuvem (térmica)</h3>
+          <p>Uma célula do grid tem dezenas de metros: o núcleo quente se diluiria rápido demais. Por isso o núcleo segue um <b>modelo integral de térmica</b>
+          (Morton, Taylor &amp; Turner, 1956), acoplado ao grid como o vórtice esférico de Hill:</p>
+          <p class="formula">dz/dt = w &nbsp; da/dt = α|w| &nbsp; d(γVw)/dt = F &nbsp; dF/dt = −N²Vw</p>
+          <p class="muted small">F₀ vem do calor deixado no ar (~35% da energia). α (entranhamento) e N (estratificação) são calibrados para a nuvem parar na altura
+          das escalas públicas em alguns minutos — e saem na faixa medida em laboratório (α ≈ 0,1) e na atmosfera real (N ≈ 0,01 s⁻¹). Para 15 kt: sobe a ~100 m/s no início
+          e estabiliza perto de 9 km em ~5 min.</p>
+        </article>
+        <article>
+          <h3>🌡️ Temperatura e cor</h3>
+          <p>A temperatura é um campo simulado: o ar quente sobe (empuxo de Boussinesq, b = g·θ'/θ₀), esfria por radiação (∝ T⁴, forte acima de ~2000 K)
+          e por mistura. A cor da bola de fogo é a de um <b>corpo negro</b> — ~7 700 K no segundo máximo (G&amp;D §2.110), depois laranja e vermelho.</p>
+          <p class="muted small">O chapéu fica branco porque o ar úmido que sobe acima do nível de condensação (~1–2 km) se expande, esfria e condensa. No início a nuvem é
+          castanho-avermelhada: óxidos de nitrogênio formados no ar quente (G&amp;D §2.16).</p>
+        </article>
+        <article>
+          <h3>⏱️ Pulso térmico no tempo</h3>
+          <p>O calor não chega de uma vez: há um flash curtíssimo e um segundo máximo em t<sub>máx</sub>. A carbonização e os incêndios no 3D seguem a fração já emitida.</p>
+          <p class="formula">t<sub>máx</sub> ≈ 0,0417·W<sup>0,44</sup> s &nbsp;&nbsp; P/P<sub>máx</sub> ≈ 2τ²/(1+τ⁴), τ = t/t<sub>máx</sub></p>
+          <div id="pulse-chart"></div>
+        </article>
+        <article>
+          <h3>🧱 Materiais: por que o vidro quebra antes</h3>
+          <p>Cada elemento é tratado como um oscilador (massa-mola) com período natural T. Sob a fase positiva de duração t<sub>d</sub>, o deslocamento máximo é o estático
+          vezes o <b>fator de carga dinâmica</b> (FCD), que vai de ≈ π·t<sub>d</sub>/T (pulso curto) a 2 (pulso longo).</p>
+          <p class="formula">m·ẍ + k·x = P(t)·A &nbsp;&nbsp; P(t) = P<sub>s</sub>(1 − t/t<sub>d</sub>)</p>
+          <div id="dlf-chart"></div>
+          <p class="muted small">Vidro (T ≈ 0,02 s) é rígido e frágil: quebra a ~0,5–1 psi e vira estilhaço. Madeira cede (~3–5 psi), alvenaria racha e tomba, concreto armado
+          e aço resistem muito mais. Explosões nucleares têm fase positiva longa (décimos de s a segundos), por isso destroem mais do que uma explosão química com o mesmo pico.</p>
+        </article>
+        <article>
+          <h3>🌍 Reflexão e vibração do solo</h3>
+          <p>Ao bater no chão, a onda reflete: perto do marco zero a reflexão é regular; além de ~40° a refletida (mais rápida, no ar já comprimido) alcança a incidente e forma o
+          <b>tronco de Mach</b>, cuja altura (ponto triplo) cresce com a distância. Uma parede voltada para a onda sente de 2× a 8× a sobrepressão (Rankine–Hugoniot).</p>
+          <p class="formula">p<sub>r</sub> = 2p(7P₀ + 4p)/(7P₀ + p) &nbsp;&nbsp; v<sub>solo</sub> ≈ p/(ρ·c)</p>
+          <p class="muted small">O solo vibra com velocidade de partícula ~p/(ρc) — alguns cm/s a 10 psi. Em explosões no solo, o tremor que viaja pelo terreno (~1 km/s)
+          chega a pontos distantes antes da onda no ar.</p>
+        </article>
+      </div>
+      <p class="muted small">Aproximações: o grid de fluidos não resolve a turbulência abaixo da célula (o ruído 3D só a sugere), a altura do ponto triplo é um modelo geométrico
+      ilustrativo e os limiares por material são valores típicos de tabelas públicas — prédios reais variam muito.</p>
+    </section>
   </div>`;
 
   setupEnergy(el);
@@ -226,6 +286,8 @@ export function renderFisica(el, ctx, first) {
   setupFriedlander(el);
   setupDecay(el);
   setupScaling(el);
+  setupPulse(el);
+  setupDLF(el);
   el.querySelectorAll('.toc a').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault();
     el.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth' });
@@ -503,4 +565,30 @@ function setupScaling(el) {
       <li>Velocidade do choque: U = c₀ √(1 + 6p/7P₀), c₀ = 340 m/s — 1 psi em ${fmtTime(fx.arrivalAt(fx.radius.blast1))} para 1 Mt</li>
       <li>Fallout: D(t) = D₁ · t<sup>−${fmtNum(CONFIG.fallout.decayExponent, 3)}</sup>; contornos elípticos ∝ W<sub>fissão</sub><sup>0,5</sup></li>
     </ul>`;
+}
+
+/* ------------------------------------------------------------------ */
+function setupPulse(el) {
+  const P = []; const F = [];
+  for (let e = -1.3; e <= 1.6; e += 0.02) { const t = 10 ** e; P.push([t, thermalPulsePower(t)]); F.push([t, thermalPulseFraction(t)]); }
+  lineChart(el.querySelector('#pulse-chart'), {
+    series: [{ name: 'potência P/Pmáx', points: P }, { name: 'energia já emitida', points: F }],
+    xDomain: [0.05, 40], yDomain: [0, 1], xLog: true, directLabels: true, height: 220,
+    xLabel: 't / tmáx', yLabel: 'fração',
+    xFmt: (v) => fmtSig(v, 2), yFmt: (v) => `${fmtNum(v * 100, 0)}%`,
+    tooltip: (xv, v) => `t = ${fmtSig(xv, 2)}·t<sub>máx</sub><br>P = ${fmtNum((v[0] ?? 0) * 100, 0)}% · emitido ${fmtNum((v[1] ?? 0) * 100, 0)}%`,
+  });
+}
+
+function setupDLF(el) {
+  const pts = [];
+  for (let e = -2; e <= 2; e += 0.04) { const r = 10 ** e; pts.push([r, dynamicLoadFactor(r)]); }
+  lineChart(el.querySelector('#dlf-chart'), {
+    series: [{ name: 'FCD', points: pts }],
+    xDomain: [0.01, 100], yDomain: [0, 2.1], xLog: true, legend: false, height: 220,
+    xLabel: 'td / T (duração da carga ÷ período natural)', yLabel: 'fator de carga dinâmica',
+    xFmt: (v) => fmtSig(v, 1), yFmt: (v) => fmtNum(v, 1),
+    dots: [['vidro', 0.5 / 0.02], ['madeira', 0.5 / 0.12], ['concreto', 0.5 / 0.35], ['aço', 0.5 / 0.6]].map(([n, r]) => ({ x: r, y: dynamicLoadFactor(r), text: n, color: 'var(--series-2)', r: 4 })),
+    tooltip: (xv, v) => `td/T = ${fmtSig(xv, 2)}<br>FCD = ${fmtSig(v[0] ?? 0, 3)}`,
+  });
 }

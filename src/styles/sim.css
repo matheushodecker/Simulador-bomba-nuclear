@@ -154,7 +154,7 @@
 .cinema-status { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); background: rgba(8,11,15,0.78); border: 1px solid var(--line2); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--muted); }
 .cinema-help { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); background: rgba(8,11,15,0.6); border-radius: 999px; padding: 4px 12px; font-size: 11.5px; color: #c3ccd6; white-space: nowrap; pointer-events: none; }
 .cinema-attrib { position: absolute; right: 8px; bottom: 6px; max-width: 46%; font-size: 10.5px; color: rgba(255,255,255,0.8); text-shadow: 0 1px 2px #000; text-align: right; pointer-events: none; }
-.cinema-info { position: absolute; z-index: 6; width: 290px; background: var(--panel-solid); border: 1px solid var(--line2); border-radius: 10px; padding: 10px 12px; box-shadow: var(--shadow); font-size: 12.5px; }
+.cinema-info { position: absolute; z-index: 6; width: 340px; background: var(--panel-solid); border: 1px solid var(--line2); border-radius: 10px; padding: 10px 12px; box-shadow: var(--shadow); font-size: 12.5px; }
 .cinema-info .icon-btn { float: right; width: 24px; height: 24px; }
 .cinema-info table td { padding: 3px 4px; }
 .view-switch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 11; display: flex; background: rgba(8,11,15,0.85); border: 1px solid var(--line2); border-radius: 999px; overflow: hidden; box-shadow: var(--shadow); }
@@ -182,3 +182,5 @@
 .cinema-radii > div.l { margin-top: -9px; translate: calc(-100% - 8px) 0; }
 .cinema-radii > div i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: -0.5px; }
 @media (max-width: 700px) { .cinema-radii > div { font-size: 10px; padding: 2px 5px 2px 4px; } }
+.inspect table td:first-child { white-space: nowrap; }
+.inspect details summary { cursor: pointer; color: var(--accent, #ffb300); margin: 2px 0; }

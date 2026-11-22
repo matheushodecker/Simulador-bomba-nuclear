@@ -11,6 +11,7 @@ import { playBlast, primeAudio } from './audio.js';
 import { buildDust, buildFires } from '../render/fxgen.js';
 import { smoothstep, clamp } from '../physics/math.js';
 import { fmtDist, fmtTime, fmtSig, fmtNum } from '../util/format.js';
+import { triplePointHeightKm, groundShockArrival, MACH_ANGLE_DEG } from '../physics/structures.js';
 
 /** duração visual-alvo da passagem da onda até 1 psi (s) */
 const SPEED = { lento: 13, normal: 7, rapido: 3.5 };
@@ -176,6 +177,20 @@ export class Simulation {
     const tp = fx.thermalPulse;
     if (tp && tPhys < tp.tMax * 25) {
       parts.push(`<span><b>Pulso térmico</b> ${fmtNum(tp.fractionAt(tPhys) * 100, 0)}% da energia emitida · pico em ${fmtTime(tp.tMax)}</span>`);
+    }
+    // reflexão da onda no solo (explosões no ar): regular perto do marco zero, Mach além de ~40°
+    if (fx.hKm > fx.radius.fireball && front > 0 && front < fx.radius.blast1 * 1.1) {
+      const sKm = fx.slantAt(tPhys);
+      const yT = triplePointHeightKm(sKm, fx.hKm, fx.psiAt(front)) * 1000;
+      parts.push(yT > 0
+        ? `<span><b>Reflexão no solo</b> tronco de Mach · ponto triplo a ~${fmtNum(yT, 0)} m</span>`
+        : `<span><b>Reflexão no solo</b> regular (ângulo < ${MACH_ANGLE_DEG}°)</span>`);
+    }
+    // explosão no solo: o tremor pelo terreno (onda P) chega antes da onda no ar a partir de certa distância
+    if (fx.hKm <= fx.radius.fireball) {
+      const tg = groundShockArrival(dc);
+      const ta = fx.arrivalAt(dc);
+      if (tg < ta && tPhys < tg) parts.push(`<span>🌍 O tremor do solo chega ao centro da tela em ${fmtTime(tg - tPhys)} (antes da onda no ar)</span>`);
     }
     const arrCam = fx.arrivalAt(dc);
     if (tPhys < arrCam && dc < fx.radius.blast1 * 3) parts.push(`<span>🔇 O som chega ao centro da tela em ${fmtTime(arrCam - tPhys)}</span>`);

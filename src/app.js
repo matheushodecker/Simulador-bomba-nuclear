@@ -17,6 +17,8 @@ import { fmtDist, fmtSig, fmtTime, fmtInt, escapeHtml, fmtYield } from './util/f
 import { damageInfo } from './physics/blast.js';
 import { OFFLINE } from './env.js';
 import { demoCity } from './data/demoCity.js';
+import { structureHtml } from './ui/structureInfo.js';
+import { materialOf } from './physics/structures.js';
 
 export function createApp({ mapView, layers, scene, city, sim, cinema }) {
   const map = mapView.map;
@@ -240,7 +242,8 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
       const gz = detonated ? sim.gz : state.gz;
       const dKm = haversineKm(gz, ll);
       const psi = fx.psiAt(dKm);
-      const lvl = fx.damageLevelAt(dKm);
+      const mat = b.mat || materialOf({ ...b.src, height: b.top - b.base });
+      const lvl = detonated && b.level != null ? b.level : fx.damageLevelAt(dKm);
       const di = damageInfo(lvl);
       const burn = fx.burnDegreeAt(dKm);
       const q = fx.thermalFluenceAt(dKm);
@@ -259,8 +262,9 @@ export function createApp({ mapView, layers, scene, city, sim, cinema }) {
           <tr><td>Radiação inicial</td><td class="num">${rem > 1e5 ? '> 100.000' : fmtSig(rem, 2)} rem</td></tr>
         </table>
         <div style="margin-top:8px"><span class="lvl" style="background:${di.color}">${di.label}</span> <span class="small">${di.desc}</span></div>
+        ${structureHtml(fx, dKm, mat)}
       </div>`;
-      new maplibregl.Popup({ maxWidth: '330px', closeButton: true }).setLngLat(ll).setHTML(html).addTo(map);
+      new maplibregl.Popup({ maxWidth: '360px', closeButton: true }).setLngLat(ll).setHTML(html).addTo(map);
       if (detonated) unlock('inspetor');
       return true;
     },

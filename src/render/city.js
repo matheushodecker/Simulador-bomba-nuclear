@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { pointInRing } from '../map/geo.js';
 import { hash01 } from '../services/overpass.js';
+import { materialOf, materialResponse, positivePhaseSeconds } from '../physics/structures.js';
 
 const TEX_W = 1024;
 
@@ -436,7 +437,14 @@ export class City {
     this.buildings.forEach((r, i) => {
       const dKm = Math.hypot(r.c[0] - gzLocal[0], r.c[1] - gzLocal[1]) / 1000;
       const psi = fx.psiAt(dKm);
-      const lvl = fx.damageLevelAt(dKm);
+      // resposta por material: estrutura (1 grau de liberdade sob a fase positiva) + vidros
+      r.mat = r.mat || materialOf({ ...r.src, height: r.top - r.base });
+      const td = positivePhaseSeconds(Math.hypot(dKm, fx.hKm), fx.yieldKt);
+      const resp = materialResponse(r.mat, psi, td);
+      const glass = materialResponse('glass', psi, td);
+      let lvl = Math.max(resp.level, Math.min(1, glass.level));
+      if (dKm < rfb && fx.hKm < rfb) lvl = 5;
+      r.resp = { ...resp, td, glassLevel: glass.level };
       const arr = fx.arrivalAt(dKm) / accel;
       const burn = fx.burnDegreeAt(dKm);
       r.dKm = dKm; r.psi = psi; r.level = lvl; r.arrival = arr; r.burn = burn;
