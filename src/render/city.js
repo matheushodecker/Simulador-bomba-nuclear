@@ -126,6 +126,7 @@ void main() {
   bool roof = abs(n.z) > 0.6;
   vec3 base = vColor;
   bool hit = uTime >= 0.0 && vT > 0.0;
+  base = pow(base, vec3(uGammaOut));
 
   bool rubble = hit && vLevel > 2.5 && vProg > 0.25;
   if (rubble) {
@@ -189,7 +190,7 @@ void main() {
   }
 
   col = mix(col, vec3(1.0, 0.98, 0.94), uFlash);
-  gl_FragColor = vec4(pow(max(col, 0.0), vec3(uGammaOut)), 1.0);
+  gl_FragColor = vec4(max(col, 0.0), 1.0);
 }
 `;
 

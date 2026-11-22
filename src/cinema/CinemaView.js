@@ -19,7 +19,8 @@ import { Atmosphere } from './atmosphere.js';
 import { VolumetricExplosionPass } from './volumetric.js';
 import { AerialPerspectiveEffect, ShockRippleEffect } from './effects.js';
 import { createDestructionUniforms, fillLut, buildHeightGrid } from './destruction.js';
-import { TilesWorld, FallbackWorld } from './worlds.js';
+import { TilesWorld, FallbackWorld, metersPerDegree } from './worlds.js';
+import { PhysicsDebris } from './physicsDebris.js';
 import { cloudState } from '../render/cloudModel.js';
 import { City } from '../render/city.js';
 import { Debris } from '../render/debris.js';
@@ -91,6 +92,8 @@ export class CinemaView {
     this.fire = new ParticleField({ additive: true });
     [this.debris, this.dust, this.smoke, this.fire].forEach((o) => this.enu.add(o.object3d));
     this.city = null;
+    this.physics = new PhysicsDebris();
+    this.scene.add(this.physics.object3d);
 
     // luz da bola de fogo
     this.spot = new THREE.SpotLight(0xffd2a0, 0, 0, 1.45, 0.6, 0);
@@ -218,6 +221,7 @@ export class CinemaView {
   /** Prédios do OSM (modo sem chave). */
   setBuildings(list) {
     this.pendingBuildings = list;
+    if (this.ready && this.world?.kind === 'tiles' && this.fx) this._preparePhysics();
     if (!this.ready || this.world?.kind !== 'fallback') return;
     if (this.city) { this.enu.remove(this.city.object3d); this.city.dispose(); }
     const city = new City(this.world.projector());
@@ -374,6 +378,7 @@ export class CinemaView {
     fillLut(this.uniforms, fx, accel);
     if (this.world?.kind === 'tiles' && !this.grid) this._measureCity(fx);
     this._applyFxToBuildings();
+    this._preparePhysics();
     const down = (((this.sim.params?.wind?.fromDeg ?? 270) + 180) % 360) * (Math.PI / 180);
     const ws = (this.sim.params?.wind?.speedKmh ?? 24) / 3.6;
     this.windENU = [Math.sin(down) * ws * 4, Math.cos(down) * ws * 4];
@@ -393,12 +398,66 @@ export class CinemaView {
     } else if (this.world?.kind === 'tiles') {
       blds = this._syntheticBuildings(fx, this.accel);
     }
-    this.debris.generate(blds, [0, 0], q.debris, fx.radius.fireball);
+    // metade dos voxels "baratos": os pedaços com física rígida cuidam do primeiro plano
+    this.debris.generate(blds, [0, 0], Math.round(q.debris * 0.5), fx.radius.fireball);
     buildDust(this.dust, { fx, gz: [0, 0], accel: this.accel, buildings: blds, count: q.dust });
     buildFires(this.fire, this.smoke, { fx, gz: [0, 0], buildings: blds, count: q.fire });
   }
 
+  /** Contornos do OSM convertidos para ENU, com chão/topo ajustados à malha medida. */
+  _osmRecords(fx, accel) {
+    const list = this.pendingBuildings;
+    if (!list?.length || !this.origin) return [];
+    const mpd = metersPerDegree(this.origin.lat);
+    const toENU = ([lng, lat]) => [(lng - this.origin.lng) * mpd.lon, (lat - this.origin.lat) * mpd.lat];
+    const g = this.grid;
+    const groundAt = (e, n) => {
+      if (!g) return 0;
+      const x = Math.floor(((e / g.R) * 0.5 + 0.5) * g.N);
+      const y = Math.floor(((n / g.R) * 0.5 + 0.5) * g.N);
+      return x >= 0 && y >= 0 && x < g.N && y < g.N ? g.ground[y * g.N + x] : 0;
+    };
+    return list.map((b) => {
+      const outer = b.outer.map(toENU);
+      outer.pop();
+      let cx = 0; let cy = 0;
+      for (const [x, y] of outer) { cx += x; cy += y; }
+      cx /= outer.length; cy /= outer.length;
+      const base = groundAt(cx, cy) + (b.minHeight || 0);
+      const dKm = Math.hypot(cx, cy) / 1000;
+      return {
+        c: [cx, cy], outer, holes: (b.holes || []).map((h) => h.map(toENU)), base, top: base + b.height,
+        dKm, psi: fx.psiAt(dKm), level: fx.damageLevelAt(dKm), arrival: fx.arrivalAt(dKm) / accel, color: b.color,
+      };
+    });
+  }
+
+  async _preparePhysics() {
+    const fx = this.fx;
+    if (!fx) return;
+    let blds;
+    if (this.city?.loaded) blds = this.city.buildings.map((b) => ({ ...b, color: b.src.color }));
+    else if (this.world?.kind === 'tiles') {
+      const osm = this._osmRecords(fx, this.accel);
+      blds = osm.length ? osm : this._syntheticBuildings(fx, this.accel).map((b) => ({ ...b, color: b.src.color }));
+    } else blds = [];
+    // foco: ponto entre a câmera e o ponto zero, dentro da zona de colapso
+    const [e, n] = this.worldToENU(this.camera.position);
+    const dCam = Math.hypot(e, n) || 1;
+    const k = Math.min(0.55, (fx.radius.blast5 * 1000 * 0.7) / dCam);
+    try {
+      const count = await this.physics.prepare({
+        buildings: blds, enuToWorld: (a, b, c) => this.enuToWorld(a, b, c), focus: [e * k, n * k],
+        grid: this.grid, groundY: this.groundY, quality: this.state.quality,
+      });
+      console.info(`[cinema] física: ${count} pedaços de prédios`);
+    } catch (err) {
+      console.warn('[cinema] física indisponível', err);
+    }
+  }
+
   onClear() {
+    this.physics?.dispose();
     this.fx = null;
     this.grid = null;
     this.cine = null;
@@ -562,6 +621,8 @@ export class CinemaView {
     }
     u.uDFire.value = 1;
 
+    this.physics.update(tau);
+
     // nuvem volumétrica
     const vu = this.vol.uniforms;
     this.vol.enabled = true;
@@ -603,6 +664,15 @@ export class CinemaView {
     su.get('uGroundY').value = this.groundY;
     const sc = center.clone().project(this.camera);
     su.get('uCenterUv').value.set(sc.x * 0.5 + 0.5, sc.y * 0.5 + 0.5);
+
+    // poeira rasteira: muro que acompanha a frente de choque + camada sobre a área destruída
+    const scale = clamp(Math.cbrt(fx.yieldKt) / 2.5, 0.6, 6) * (cs.surface ? 1.3 : 1);
+    const frontM = rKm * 1000;
+    const wallAmt = rKm > 0 ? clamp(Math.log10(psi + 1) / 0.9, 0, 1) * (1 - smoothstep(fx.radius.blast3, fx.radius.blast1, rKm)) : 0;
+    const settleR = Math.min(frontM, fx.radius.blast3 * 1000 * 1.1);
+    const settleAmt = 0.45 * smoothstep(0.5, 3, tau) * (1 - smoothstep(90, 240, tau)) * (cs.surface ? 1.3 : 1);
+    vu.uDustA.value.set(frontM, Math.max(30, frontM * 0.1), Math.min(400, (20 + 0.02 * frontM) * Math.min(scale, 2.5)), wallAmt);
+    vu.uDustB.value.set(settleR, (8 + 55 * (1 - Math.exp(-tau / 15))) * scale, settleR > 10 ? settleAmt : 0, Math.max(frontM * (wallAmt > 0 ? 1.08 : 0), settleR) + 60);
 
     if (this.city) {
       this.city.lightScale = Math.max(0.1, p.ambient);

@@ -40,6 +40,9 @@ Botão **🎬 Cinema 3D** no topo do mapa. É um motor 3D próprio (three.js + p
 - **Bola de fogo e cogumelo volumétricos** (raymarching com ruído Perlin-Worley, auto-sombreamento, emissão de corpo negro, fuligem), com a saia de poeira nas explosões no solo.
 - **Luz da bola de fogo com sombras** sobre a cidade, clarão, refração da onda de choque e nuvem de condensação.
 - **Destruição na GPU** da malha fotogramétrica: o que está acima do chão desaba conforme a onda chega, fachadas carbonizam, focos de incêndio, destroços em voxels, poeira e fumaça.
+- **Destroços com física de corpo rígido** (Rapier/WebAssembly): os prédios atingidos perto da câmera são fatiados em
+  andares e colunas que a onda de choque empurra, caem com a gravidade, colidem e se amontoam em escombros.
+- **Poeira volumétrica**: muro de poeira que acompanha a frente de choque e camada de poeira sobre a área destruída.
 - **Câmera cinematográfica** que acompanha a onda e recua para enquadrar o cogumelo (qualquer clique devolve o controle).
 
 ### Chave das cidades 3D
@@ -94,7 +97,8 @@ src/
                            cogumelo, onda de choque, efeitos no chão, ogiva estilizada (SVG)
   cinema/                  modo cinema: CinemaView (motor), worlds (Google/Cesium/satélite+OSM),
                            volumetric (nuvem por raymarching), destruction (shader da malha),
-                           atmosphere (céu/hora do dia), effects (neblina, refração do choque)
+                           atmosphere (céu/hora do dia), effects (neblina, refração do choque),
+                           physicsDebris (escombros com física Rapier, carregada sob demanda)
   sim/                     orquestração da animação e som sintetizado
   game/                    Oficina, Meu Arsenal, desafios, conquistas
   ui/                      painéis, resultados, gráficos SVG, notificações

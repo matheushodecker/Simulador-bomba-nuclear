@@ -102,14 +102,14 @@ export function buildFires(fire, smoke, { fx, gz, buildings, count }) {
         color: [1, 0.5, 0.1],
       });
     }
-    const gr = 0.1 + rand() * 0.1;
+    const gr = 0.46 + rand() * 0.12;
     smoke.push({
       pos: [s.x, s.y, s.top],
       vel: [0, 0, 9 + rand() * 7],
       start: start + 0.8,
       life: 14 + rand() * 10,
       s0: fs * 1.5, s1: 60 + s.s * 2 + rand() * 60,
-      seed: rand(), kind: 2, loop: true, alpha: 0.42,
+      seed: rand(), kind: 2, loop: true, alpha: 0.3,
       color: [gr, gr * 0.95, gr * 0.9],
     });
   }

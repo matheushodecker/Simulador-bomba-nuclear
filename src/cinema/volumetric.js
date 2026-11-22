@@ -46,6 +46,8 @@ uniform float uLightSteps;
 uniform float uDust;
 uniform float uEmission;
 uniform float uCapAmt;
+uniform vec4 uDustA;   // raio da frente, largura do muro, altura do muro, intensidade
+uniform vec4 uDustB;   // raio da área assentada, altura, intensidade, raio limite
 varying vec2 vUv;
 
 float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
@@ -132,6 +134,19 @@ float lightOD(vec3 p) {
   return od;
 }
 
+/* poeira levantada pela onda de choque: muro que acompanha a frente + camada assentada */
+float dustDensity(vec3 p) {
+  float rho = length(p.xy);
+  float n = texture(tNoise, p / 420.0 + vec3(0.0, 0.0, -uTime * 0.012)).r;
+  float n2 = texture(tNoise, p / 130.0 + vec3(uTime * 0.02, 0.0, 0.0)).g;
+  float x = (uDustA.x - rho) / max(uDustA.y, 1.0);
+  float wall = x > -0.2 ? exp(-max(x, 0.0) * 1.1) * smoothstep(-0.2, 0.15, x) : 0.0;
+  wall *= exp(-max(p.z, 0.0) / max(uDustA.z, 1.0)) * uDustA.w;
+  float settle = (1.0 - smoothstep(uDustB.x * 0.7, uDustB.x, rho)) * exp(-max(p.z, 0.0) / max(uDustB.y, 1.0)) * uDustB.z;
+  float d = wall * (0.35 + 0.9 * n + 0.35 * n2) + settle * smoothstep(0.35, 0.8, n * 0.8 + n2 * 0.4);
+  return clamp(d - 0.1, 0.0, 1.0);
+}
+
 vec3 blackbody(float t) {
   vec3 c = mix(vec3(0.5, 0.04, 0.0), vec3(1.0, 0.32, 0.04), smoothstep(0.0, 0.35, t));
   c = mix(c, vec3(1.0, 0.72, 0.32), smoothstep(0.3, 0.7, t));
@@ -163,7 +178,7 @@ vec2 hitCylinder(vec3 ro, vec3 rd, float R, float z0, float z1) {
 }
 
 void main() {
-  if (uMisc.y <= 0.001) { gl_FragColor = vec4(0.0); return; }
+  if (uMisc.y <= 0.001 && uDustA.w + uDustB.z <= 0.01) { gl_FragColor = vec4(0.0); return; }
   vec4 vp = uProjInv * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
   vec3 vdir = normalize(vp.xyz / vp.w);
   vec3 wdir = normalize(mat3(uCamWorld) * vdir);
@@ -182,7 +197,41 @@ void main() {
   float zTop = max(uCap.x + uCap.z * 2.2, uFire.x + uFire.y * 1.5);
   vec2 tt = hitCylinder(ro, rd, R, -5.0, zTop);
   tt.y = min(tt.y, sceneDist);
-  if (tt.x >= tt.y) { gl_FragColor = vec4(0.0); return; }
+
+  // ---------- poeira rasteira (marcha própria, barata) ----------
+  vec3 dCol = vec3(0.0); float dT = 1.0; float dMean = 1e12;
+  if (uDustA.w + uDustB.z > 0.01) {
+    float dTop = max(uDustA.z * 3.5, uDustB.y * 3.0);
+    vec2 td = hitCylinder(ro, rd, uDustB.w, -2.0, dTop);
+    td.y = min(td.y, sceneDist);
+    if (td.x < td.y) {
+      float nS = 22.0;
+      float ddt = (td.y - td.x) / nS;
+      float jit = ign(gl_FragCoord.xy * 1.37 + 17.0);
+      float sD = 1.0 / 55.0;
+      float tSum = 0.0; float wSum = 0.0;
+      for (int i = 0; i < 22; i++) {
+        float t = td.x + (float(i) + jit) * ddt;
+        vec3 p = ro + rd * t;
+        float dn = dustDensity(p);
+        if (dn < 0.003) continue;
+        float sig = dn * sD;
+        float Tl = exp(-sD * dn * max(dTop - p.z, 0.0) * 0.35 / max(uSunDir.z, 0.12));
+        vec3 amb = mix(uGroundColor, uSkyColor, 0.6) * 0.55;
+        vec3 fireL = vec3(1.0, 0.5, 0.18) * uFire.z * uFire.w * 3.0 * exp(-length(p.xy) / max(uFire.y * 3.0, 1.0));
+        vec3 S = vec3(0.55, 0.48, 0.40) * (uSunColor * Tl * 0.55 + amb + fireL);
+        float Ti = exp(-sig * ddt);
+        dCol += dT * S * (1.0 - Ti);
+        tSum += t * dT * (1.0 - Ti); wSum += dT * (1.0 - Ti);
+        dT *= Ti;
+        if (dT < 0.02) break;
+      }
+      dMean = wSum > 0.0 ? tSum / wSum : td.x;
+      float fogD = 1.0 - exp(-dMean * uFogDensity);
+      dCol = mix(dCol, uFogColor * (1.0 - dT), fogD * 0.85);
+    }
+  }
+  if (tt.x >= tt.y) { gl_FragColor = vec4(dCol, 1.0 - dT); return; }
 
   float steps = uSteps;
   float dt = (tt.y - tt.x) / steps;
@@ -229,7 +278,10 @@ void main() {
   float meanT = wAcc > 0.0 ? tAcc / wAcc : tt.x;
   float fog = 1.0 - exp(-meanT * uFogDensity);
   col = mix(col, uFogColor * alpha, fog * 0.85);
-  gl_FragColor = vec4(col, alpha);
+  // compõe poeira e nuvem na ordem de profundidade
+  vec3 outC; 
+  if (dMean < meanT) outC = dCol + dT * col; else outC = col + T * dCol;
+  gl_FragColor = vec4(outC, 1.0 - T * dT);
 }
 `;
 
@@ -282,6 +334,8 @@ export class VolumetricExplosionPass extends Pass {
         uDust: { value: 0 },
         uEmission: { value: 40 },
         uCapAmt: { value: 0 },
+        uDustA: { value: new THREE.Vector4() },
+        uDustB: { value: new THREE.Vector4() },
       },
     });
     this.compMaterial = new THREE.ShaderMaterial({

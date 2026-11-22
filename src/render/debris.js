@@ -68,10 +68,9 @@ varying float vDust;
 void main() {
   vec3 n = normalize(vN);
   float diff = max(dot(n, uSunDir), 0.0);
-  vec3 col = vColor * (0.35 + 0.65 * diff + 0.15 * (0.5 + 0.5 * n.z));
-  col = mix(col, vec3(0.42, 0.40, 0.37), vDust * 0.35); // coberto de poeira
-  col *= uLightScale;
-  col = pow(max(col, 0.0), vec3(uGammaOut));
+  vec3 albedo = mix(vColor, vec3(0.55, 0.52, 0.48), 0.35 + 0.35 * vDust); // coberto de poeira de concreto
+  albedo = pow(albedo, vec3(uGammaOut));                                       // cor → linear no modo cinema
+  vec3 col = albedo * (0.45 + 0.75 * diff + 0.15 * (0.5 + 0.5 * n.z)) * uLightScale;
   col += vec3(1.0, 0.35, 0.05) * vHeat * 1.2 * uEmissiveBoost; // incandescente perto do ponto zero
   col = mix(col, vec3(1.0), uFlash);
   gl_FragColor = vec4(col, 1.0);
@@ -173,7 +172,7 @@ export class Debris {
         const shade = 0.55 + 0.45 * rand();
         const concrete = rand() < 0.45;
         const c = concrete ? [0.62, 0.61, 0.58] : r.src.color;
-        const charred = r.burn >= 2 ? 0.55 : 1;
+        const charred = r.burn >= 3 ? 0.75 : 1;
         iColor.set([c[0] * shade * charred, c[1] * shade * charred, c[2] * shade * charred], k * 3);
         k++;
       }

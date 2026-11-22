@@ -107,8 +107,7 @@ void main() {
   vec4 tx = texture2D(uTex, vUv);
   float a = tx.a * vAlpha;
   if (a < 0.003) discard;
-  vec3 col = vColor * (0.72 + 0.4 * vUv.y) * (0.8 + 0.25 * tx.r) * uLightScale;
-  col = pow(max(col, 0.0), vec3(uGammaOut));
+  vec3 col = pow(vColor, vec3(uGammaOut)) * (0.72 + 0.4 * vUv.y) * (0.8 + 0.25 * tx.r) * uLightScale;
   if (vKind > 2.5) col = mix(vec3(1.0, 0.85, 0.4), vec3(1.0, 0.3, 0.05), vK) * 1.4 * uEmissiveBoost; // chama
   col = mix(col, vec3(1.0), uFlash * 0.7);
   gl_FragColor = vec4(col, a);
