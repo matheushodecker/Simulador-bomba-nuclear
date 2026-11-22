@@ -66,6 +66,9 @@ export function initCinemaControls({ cinema, mapView }) {
     savePrefs();
     emit('toast', { type: 'info', text: 'A nova configuração de fluidos vale a partir da próxima detonação.' });
   });
+  const rd = $('cinema-radii');
+  rd.checked = state.cinema.radii !== false;
+  rd.addEventListener('change', () => { state.cinema.radii = rd.checked; savePrefs(); });
   const time = $('cinema-time');
   time.value = state.cinema.timeOfDay;
   time.addEventListener('change', () => {

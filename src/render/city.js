@@ -98,6 +98,7 @@ uniform float uTime;
 uniform float uNow;
 uniform float uTint;
 uniform float uFlash;
+uniform float uPulse;
 uniform vec3 uSunDir;
 uniform vec3 uFirePos;
 uniform float uFireLight;
@@ -158,7 +159,7 @@ void main() {
   if (uTime > 0.0 && vBurn > 0.5) {
     vec2 toGZ = normalize(uGZ - vCenter + 1e-3);
     float facing = roof ? 0.7 : max(dot(n.xy, toGZ), 0.0);
-    float amt = clamp(vBurn / 3.0, 0.0, 1.0) * (0.3 + 0.7 * facing) * smoothstep(0.0, 0.6, uTime);
+    float amt = clamp(vBurn / 3.0, 0.0, 1.0) * (0.3 + 0.7 * facing) * clamp(uPulse * 1.15, 0.0, 1.0);
     base = mix(base, vec3(0.07, 0.05, 0.045), amt * 0.85);
   }
 
@@ -182,7 +183,7 @@ void main() {
   }
 
   // incêndios (zona térmica e prédios colapsados)
-  if (uTime > 0.2 && (vBurn > 1.5 || (hit && vLevel > 3.5)) && vSeed > 0.3) {
+  if (uTime > 0.0 && uPulse > 0.5 && (vBurn > 1.5 || (hit && vLevel > 3.5)) && vSeed > 0.3) {
     float flick = 0.55 + 0.45 * sin(uNow * 9.0 + vSeed * 50.0 + vWinZ * 0.7) * sin(uNow * 5.3 + vU * 0.5);
     float lowZ = 1.0 - smoothstep(0.0, 22.0, vWinZ * (1.0 - vProg * 0.8));
     float fire = smoothstep(0.2, 3.0, uTime) * flick * (roof ? 0.35 : 1.0) * (0.35 + 0.65 * lowZ);
@@ -241,6 +242,7 @@ export class City {
     this.fire = { pos: new THREE.Vector3(), light: 0, range: 1000 };
     this.gzLocal = [0, 0];
     this.flash = 0;
+    this.pulse = 0; // fração do pulso térmico já emitida (0–1)
     // ajustes usados pelo modo cinema (saída linear/HDR e iluminação por hora do dia)
     this.lightScale = 1;
     this.gammaOut = 1;
@@ -378,6 +380,7 @@ export class City {
       uGZ: { value: new THREE.Vector2() },
       uTint: { value: this.tint },
       uFlash: { value: 0 },
+      uPulse: { value: 0 },
       uSunDir: { value: new THREE.Vector3(-0.45, -0.35, 0.82).normalize() },
       uFirePos: { value: new THREE.Vector3() },
       uFireLight: { value: 0 },
@@ -516,6 +519,7 @@ export class City {
     u.uTint.value = this.tint;
     u.uGZ.value.set(this.gzLocal[0], this.gzLocal[1]);
     u.uFlash.value = this.flash;
+    u.uPulse.value = ctx.tau < 0 ? 0 : this.pulse;
     if (this.fireSource) {
       this.fire.pos.copy(this.fireSource.center);
       this.fire.light = this.fireSource.light;

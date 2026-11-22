@@ -17,7 +17,7 @@ import { N8AOPostPass } from 'n8ao';
 import { EnvironmentControls } from '3d-tiles-renderer';
 import { Atmosphere } from './atmosphere.js';
 import { VolumetricExplosionPass } from './volumetric.js';
-import { AerialPerspectiveEffect, ShockRippleEffect } from './effects.js';
+import { AerialPerspectiveEffect, ShockRippleEffect, RadiiEffect } from './effects.js';
 import { createDestructionUniforms, fillLut, buildHeightGrid } from './destruction.js';
 import { TilesWorld, FallbackWorld, metersPerDegree } from './worlds.js';
 import { PhysicsDebris } from './physicsDebris.js';
@@ -115,6 +115,13 @@ export class CinemaView {
     this.aoPass.configuration.halfRes = true;
     this.aoPass.configuration.gammaCorrection = false;
     composer.addPass(this.aoPass);
+    // raios de Glasstone sobre o terreno (antes da nuvem: ela os encobre quando está na frente)
+    this.radii = new RadiiEffect();
+    composer.addPass(new EffectPass(this.camera, this.radii));
+    this.radiiLabels = document.createElement('div');
+    this.radiiLabels.className = 'cinema-radii';
+    this.radiiLabels.setAttribute('aria-hidden', 'true');
+    this.host.appendChild(this.radiiLabels);
     this.vol = new VolumetricExplosionPass(this.camera);
     composer.addPass(this.vol);
     this.aerial = new AerialPerspectiveEffect();
@@ -523,6 +530,8 @@ export class CinemaView {
     this.atmo.follow(this.camera);
     this.aerial.sync(this.camera);
     this.shockFx.sync(this.camera);
+    this.radii.sync(this.camera);
+    this._updateRadii(tau, now);
     this.composer.render(dt);
     if (!this._lastHud || now - this._lastHud > 700) { this._lastHud = now; this._updateOverlay(); }
   }
@@ -537,6 +546,105 @@ export class CinemaView {
       cam.far = far;
       cam.updateProjectionMatrix();
     }
+  }
+
+  /**
+   * Raios de Glasstone no terreno 3D + rótulos. Antes da detonação mostra uma prévia;
+   * depois, cada anel aparece quando o efeito chega lá (frente de choque, pulso térmico).
+   */
+  _updateRadii(tau, now) {
+    const eff = this.radii;
+    const show = this.state.cinema.radii !== false;
+    let fx = this.fx && tau >= 0 ? this.fx : null;
+    const preview = !fx;
+    if (preview && show && this.previewFx) {
+      if (!this._pvFx || now - this._pvAt > 500) { this._pvFx = this.previewFx(); this._pvAt = now; }
+      fx = this._pvFx;
+    }
+    const labels = this.radiiLabels;
+    if (!show || !fx) {
+      eff.uniforms.get('uN').value = 0;
+      if (labels.childElementCount) labels.replaceChildren();
+      return;
+    }
+    const enabled = this.sim.layers?.enabled;
+    const tPhys = preview ? Infinity : tau * (this.accel || 1);
+    const front = preview ? Infinity : fx.frontAt(tPhys);
+    const pulse = preview ? 1 : fx.thermalPulse.fractionAt(tPhys);
+    const R = eff.uniforms.get('uR').value;
+    const C = eff.uniforms.get('uC').value;
+    const A = eff.uniforms.get('uA').value;
+    const list = [];
+    for (const r of fx.rings) {
+      if (list.length >= eff.maxRings) break;
+      if (enabled && !enabled.has(r.key)) continue;
+      let a;
+      if (preview) a = 0.6;
+      else if (r.key.startsWith('blast')) a = smoothstep(r.radiusKm, r.radiusKm * 1.12 + 0.02, front);
+      else if (r.key.startsWith('thermal')) a = smoothstep(0.3, 0.7, pulse);
+      else if (r.key === 'rad500') a = smoothstep(0.3, 0.8, tau);
+      else a = smoothstep(0.02, 0.3, tau);
+      if (a <= 0.01) continue;
+      list.push({ r, a });
+    }
+    list.forEach(({ r, a }, i) => {
+      R[i] = r.radiusKm * 1000;
+      C[i].set(r.color).convertSRGBToLinear();
+      A[i] = a;
+    });
+    eff.uniforms.get('uN').value = list.length;
+    eff.uniforms.get('uCenter').value.copy(this.enuToWorld(0, 0, 0));
+
+    // rótulos: no lado do anel voltado para a câmera, em diagonal (direita/esquerda alternadas),
+    // de modo que anéis maiores ficam mais abaixo na tela e os rótulos formam uma "escada"
+    const showLabels = !enabled || enabled.has('labels');
+    if (!showLabels) { if (labels.childElementCount) labels.replaceChildren(); return; }
+    while (labels.childElementCount < list.length) labels.appendChild(document.createElement('div'));
+    while (labels.childElementCount > list.length) labels.lastChild.remove();
+    const W = this.host.clientWidth;
+    const H = this.host.clientHeight;
+    const rightW = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    const camENU = this.worldToENU(this.camera.position);
+    let re = -rightW.x;
+    let rn = rightW.z;
+    const len = Math.hypot(re, rn) || 1;
+    re /= len; rn /= len;
+    let te = camENU[0]; let tn = camENU[1];
+    const tl = Math.hypot(te, tn) || 1;
+    te /= tl; tn /= tl;
+    const placed = [];
+    const v = new THREE.Vector3();
+    list.forEach(({ r, a }, i) => {
+      const el = labels.children[i];
+      const side = i % 2 === 0 ? 1 : -1;
+      const Rm = r.radiusKm * 1000;
+      const ph = 0.9; // ~50° a partir da direção da câmera
+      const de = te * Math.cos(ph) + re * side * Math.sin(ph);
+      const dn = tn * Math.cos(ph) + rn * side * Math.sin(ph);
+      v.copy(this.enuToWorld(de * Rm, dn * Rm, 0)).project(this.camera);
+      if (v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05) { el.style.display = 'none'; return; }
+      let x = ((v.x + 1) / 2) * W;
+      let y = ((1 - v.y) / 2) * H;
+      // evita sobreposição com rótulos já colocados do mesmo lado
+      for (let k = 0; k < 6; k++) {
+        const hit = placed.find((p) => Math.abs(p.x - x) < 150 && Math.abs(p.y - y) < 17);
+        if (!hit) break;
+        y = hit.y + 18;
+      }
+      const text = `${r.label} · ${fmtDist(r.radiusKm)}`;
+      // mantém o rótulo inteiro dentro da tela
+      const estW = text.length * 6.4 + 34;
+      x = side > 0 ? Math.min(x, W - estW - 6) : Math.max(x, estW + 6);
+      placed.push({ x, y });
+      if (el.dataset.t !== text) {
+        el.dataset.t = text;
+        el.innerHTML = `<i style="background:${r.color}"></i>${text}`;
+      }
+      el.className = side > 0 ? 'r' : 'l';
+      el.style.display = '';
+      el.style.opacity = (0.35 + 0.65 * a).toFixed(2);
+      el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`;
+    });
   }
 
   _applyShake(tau) {
@@ -596,16 +704,22 @@ export class CinemaView {
       this.aerial.uniforms.get('uFlash').value = 0;
       this.shockFx.uniforms.get('uStrength').value = 0;
       this.shockFx.uniforms.get('uWilson').value = 0;
+      u.uDPulse.value = 0;
       if (this.city) { this.city.lightScale = Math.max(0.1, p.ambient); this.city.update({ tau: -1, now }); }
       return;
     }
     const cs = cloudState(fx, tau, this.sim.tFb || 1);
     const reduce = this.state.reduceFlash;
 
-    // flash e luz da bola de fogo
-    const flash = Math.exp(-tau / 0.12) * (reduce ? 0.25 : 2.2);
+    // flash e luz da bola de fogo seguem a curva de potência do pulso térmico
+    // (primeiro máximo curtíssimo + segundo máximo em t_máx ≈ 0,0417·W^0,44 s)
+    const tPhys = tau * (this.accel || 1);
+    const tp = fx.thermalPulse;
+    const pulseP = tp ? Math.max(tp.powerAt(tPhys), 0.6 * Math.exp(-tPhys / (0.08 * tp.tMax))) : Math.exp(-tau / 0.12);
+    const flash = pulseP * (reduce ? 0.25 : 2.2);
     this.aerial.uniforms.get('uFlash').value = flash;
-    const L = (2.2 * Math.exp(-tau / 0.6) + 0.9 * Math.exp(-tau / ((this.sim.tFb || 1) * 3 + 2))) * Math.max(cs.fbAmt, 0.15);
+    u.uDPulse.value = tp ? tp.fractionAt(tPhys) : smoothstep(0, 0.6, tau);
+    const L = (2.2 * pulseP + 0.9 * Math.exp(-tau / ((this.sim.tFb || 1) * 3 + 2))) * Math.max(cs.fbAmt, 0.15);
     const firePos = this.enuToWorld(0, 0, cs.fbZ + cs.fbR * 0.3);
     const airburst = !cs.surface;
     const I = L * 40 * (reduce ? 0.6 : 1);
@@ -654,7 +768,7 @@ export class CinemaView {
     const fluidOn = this.fluid.update(tau) && this.fluid.bind(vu);
 
     // onda de choque: refração + nuvem de condensação
-    const tPhys = tau * this.accel;
+    // (tPhys já calculado acima)
     const sKm = fx.slantAt(tPhys);
     const rKm = fx.frontAt(tPhys);
     const end = Math.hypot(fx.radius.blast1 * 1.1, fx.hKm);
@@ -693,6 +807,7 @@ export class CinemaView {
       this.city.lightScale = Math.max(0.1, p.ambient);
       this.city.tint = this.state.tint ? 0.85 : 0;
       this.city.flash = Math.min(1, flash * 0.4);
+      this.city.pulse = u.uDPulse.value;
       this.city.fire.pos.set(0, 0, cs.fbZ);
       this.city.fire.light = L * 1.5;
       this.city.fire.range = Math.max(cs.fbR * 6, 600);

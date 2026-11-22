@@ -141,3 +141,69 @@ export class ShockRippleEffect extends Effect {
     this.uniforms.get('uCamPos').value.setFromMatrixPosition(camera.matrixWorld);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Raios de Glasstone desenhados sobre o terreno e os prédios          */
+/* ------------------------------------------------------------------ */
+
+const MAX_RINGS = 12;
+const RADII = /* glsl */ `
+uniform mat4 uProjInv;
+uniform mat4 uCamWorld;
+uniform vec3 uCenter;
+uniform float uR[${MAX_RINGS}];
+uniform vec3 uC[${MAX_RINGS}];
+uniform float uA[${MAX_RINGS}];
+uniform int uN;
+uniform float uFill;
+void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
+  vec3 col = inputColor.rgb;
+  if (depth < 0.99999 && uN > 0) {
+    // posição no mundo do pixel (como um decalque projetado de cima: segue chão, telhados e encostas)
+    vec4 v = uProjInv * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    v /= v.w;
+    vec3 wp = (uCamWorld * vec4(v.xyz, 1.0)).xyz;
+    float d = length(wp.xz - uCenter.xz);
+    float fw = max(fwidth(d), 0.3);
+    for (int i = 0; i < ${MAX_RINGS}; i++) {
+      if (i >= uN) break;
+      float a = uA[i];
+      if (a <= 0.001) continue;
+      float e = abs(d - uR[i]);
+      float line = 1.0 - smoothstep(fw * 0.9, fw * 2.2, e);
+      float halo = 1.0 - smoothstep(fw * 2.2, fw * 5.0, e);
+      col = mix(col, col * 0.3, halo * 0.55 * a);
+      col = mix(col, uC[i] * 1.4, line * a);
+      // faixa suave por dentro do anel: indica de que lado está a zona afetada
+      float band = step(d, uR[i]) * (1.0 - smoothstep(0.0, max(uR[i] * 0.05, fw * 10.0), uR[i] - d));
+      col = mix(col, uC[i], band * uFill * a);
+    }
+  }
+  outputColor = vec4(col, inputColor.a);
+}
+`;
+
+export class RadiiEffect extends Effect {
+  constructor() {
+    super('RadiiEffect', RADII, {
+      attributes: EffectAttribute.DEPTH,
+      blendFunction: BlendFunction.NORMAL,
+      uniforms: new Map([
+        ['uProjInv', new THREE.Uniform(new THREE.Matrix4())],
+        ['uCamWorld', new THREE.Uniform(new THREE.Matrix4())],
+        ['uCenter', new THREE.Uniform(new THREE.Vector3())],
+        ['uR', new THREE.Uniform(new Array(MAX_RINGS).fill(0))],
+        ['uC', new THREE.Uniform(Array.from({ length: MAX_RINGS }, () => new THREE.Color()))],
+        ['uA', new THREE.Uniform(new Array(MAX_RINGS).fill(0))],
+        ['uN', new THREE.Uniform(0)],
+        ['uFill', new THREE.Uniform(0.12)],
+      ]),
+    });
+    this.maxRings = MAX_RINGS;
+  }
+
+  sync(camera) {
+    this.uniforms.get('uProjInv').value.copy(camera.projectionMatrixInverse);
+    this.uniforms.get('uCamWorld').value.copy(camera.matrixWorld);
+  }
+}

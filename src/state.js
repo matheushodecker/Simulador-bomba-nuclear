@@ -40,7 +40,7 @@ export const state = {
   density: 'auto',
   buildings: { radiusM: OFFLINE ? 2000 : 1500, auto: true, loading: false, center: null, count: 0 },
   compare: { on: false, weaponId: 'castle-bravo', layout: 'same' },
-  cinema: { active: false, provider: OFFLINE ? 'none' : cinemaProvider, key: '', timeOfDay: prefs.timeOfDay || 'dia', fluid: prefs.fluid || 'auto' },
+  cinema: { active: false, provider: OFFLINE ? 'none' : cinemaProvider, key: '', timeOfDay: prefs.timeOfDay || 'dia', fluid: prefs.fluid || 'auto', radii: prefs.radii !== false },
   lastResult: null,
 };
 
@@ -50,7 +50,7 @@ export function savePrefs() {
   save('prefs', {
     basemap: state.basemap, quality: state.quality, speed: state.speed, tint: state.tint,
     cinematic: state.cinematic, sound: state.sound, reduceFlash: state.reduceFlash,
-    cinemaProvider: state.cinema.provider, timeOfDay: state.cinema.timeOfDay, fluid: state.cinema.fluid,
+    cinemaProvider: state.cinema.provider, timeOfDay: state.cinema.timeOfDay, fluid: state.cinema.fluid, radii: state.cinema.radii,
   });
 }
 

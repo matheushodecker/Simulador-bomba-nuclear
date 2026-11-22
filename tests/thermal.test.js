@@ -59,3 +59,32 @@ describe('térmica (Morton–Taylor–Turner)', () => {
     expect(m.buoyancy(s).dTheta).toBeLessThan(d0 * 0.1);
   });
 });
+
+import { thermalPulseTmax, thermalPulsePower, thermalPulseFraction } from '../src/physics/thermal.js';
+
+describe('pulso térmico no tempo', () => {
+  it('t_máx segue 0,0417·W^0,44', () => {
+    expect(thermalPulseTmax(1000)).toBeCloseTo(0.0417 * 1000 ** 0.44, 6);
+    expect(thermalPulseTmax(15)).toBeGreaterThan(0.1);
+    expect(thermalPulseTmax(15)).toBeLessThan(0.2);
+  });
+  it('potência tem pico 1 em τ = 1', () => {
+    expect(thermalPulsePower(1)).toBeCloseTo(1, 9);
+    expect(thermalPulsePower(0.5)).toBeLessThan(1);
+    expect(thermalPulsePower(2)).toBeLessThan(1);
+  });
+  it('fração emitida: ~20% até t_máx, ~90% até 10·t_máx, monotônica', () => {
+    expect(thermalPulseFraction(1)).toBeGreaterThan(0.18);
+    expect(thermalPulseFraction(1)).toBeLessThan(0.26);
+    expect(thermalPulseFraction(10)).toBeGreaterThan(0.85);
+    expect(thermalPulseFraction(10)).toBeLessThan(0.95);
+    let prev = 0;
+    for (let t = 0.05; t < 50; t *= 1.3) { const f = thermalPulseFraction(t); expect(f).toBeGreaterThanOrEqual(prev); prev = f; }
+    expect(thermalPulseFraction(1e6)).toBeCloseTo(1, 4);
+  });
+  it('forma fechada confere com integração numérica', () => {
+    let acc = 0; const h = 1e-4;
+    for (let t = h / 2; t < 3; t += h) acc += thermalPulsePower(t) * h;
+    expect(thermalPulseFraction(3)).toBeCloseTo(acc / (Math.PI / Math.SQRT2), 3);
+  });
+});

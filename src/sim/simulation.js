@@ -137,6 +137,7 @@ export class Simulation {
 
     const flash = Math.exp(-tau / 0.16) * (this.opts.reduceFlash ? 0.25 : 1);
     this.city.flash = flash * 0.9;
+    this.city.pulse = fx.thermalPulse ? fx.thermalPulse.fractionAt(tPhys) : smoothstep(0, 0.6, tau);
     this.debris.flash = flash * 0.9;
     this.dust.flash = flash;
     this.flashEl.style.opacity = this.cinemaActive ? '0' : String(this.opts.reduceFlash ? flash * 0.35 : flash);
@@ -171,6 +172,10 @@ export class Simulation {
       parts.push(`<span><b>Frente de choque</b> ${fmtDist(front)} · ${fmtSig(psi, 2)} psi · ${fmtNum(speedAt(psi), 0)} m/s</span>`);
     } else if (front >= fx.radius.blast1 * 1.1) {
       parts.push(`<span><b>Onda de choque</b> passou de 1 psi (${fmtDist(fx.radius.blast1)}) em ${fmtTime(fx.arrivalAt(fx.radius.blast1))}</span>`);
+    }
+    const tp = fx.thermalPulse;
+    if (tp && tPhys < tp.tMax * 25) {
+      parts.push(`<span><b>Pulso térmico</b> ${fmtNum(tp.fractionAt(tPhys) * 100, 0)}% da energia emitida · pico em ${fmtTime(tp.tMax)}</span>`);
     }
     const arrCam = fx.arrivalAt(dc);
     if (tPhys < arrCam && dc < fx.radius.blast1 * 3) parts.push(`<span>🔇 O som chega ao centro da tela em ${fmtTime(arrCam - tPhys)}</span>`);

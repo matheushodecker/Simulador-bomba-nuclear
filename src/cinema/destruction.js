@@ -33,6 +33,7 @@ export function createDestructionUniforms() {
     uDCollapse: { value: CONFIG.anim.collapseSeconds },
     uDNow: { value: 0 },
     uDFire: { value: 1 },
+    uDPulse: { value: 0 }, // fração do pulso térmico já emitida (0–1)
   };
 }
 
@@ -155,6 +156,7 @@ const FRAG_HEAD = /* glsl */ `
 uniform float uDTime;
 uniform float uDNow;
 uniform float uDFire;
+uniform float uDPulse;
 varying vec4 vDestr;
 varying vec3 vDEnu;
 float dHashF(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -164,7 +166,8 @@ const FRAG_COLOR = /* glsl */ `
 {
   float burn = vDestr.z;
   if (uDTime > 0.0 && burn > 0.5) {
-    float amt = clamp(burn / 3.0, 0.0, 1.0) * smoothstep(0.0, 0.6, uDTime);
+    // carbonização acompanha a energia térmica já recebida (luz chega antes da onda de choque)
+    float amt = clamp(burn / 3.0, 0.0, 1.0) * clamp(uDPulse * 1.15, 0.0, 1.0);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.035, 0.03), amt * 0.8);
   }
   if (vDestr.y > 0.05 && vDestr.x > 2.5) {
@@ -178,7 +181,8 @@ const FRAG_COLOR = /* glsl */ `
 const FRAG_EMISSIVE = /* glsl */ `
 {
   float burn = vDestr.z;
-  if (uDTime > 0.3 && (burn > 1.5 || (vDestr.x > 3.5 && vDestr.w > 0.0))) {
+  // incêndios: ignição quando boa parte do pulso já chegou (3º grau ≈ materiais finos inflamam)
+  if (uDTime > 0.0 && uDPulse > 0.5 && (burn > 1.5 || (vDestr.x > 3.5 && vDestr.w > 0.0))) {
     float cell = dHashF(floor(vDEnu.xy / 9.0));
     if (cell > 0.55) {
       float fl = 0.55 + 0.45 * sin(uDNow * 8.0 + cell * 60.0 + vDEnu.z * 0.5) * sin(uDNow * 4.7 + vDEnu.x * 0.3);

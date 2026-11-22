@@ -9,7 +9,7 @@ import {
   blastRadius, makeOverpressureFn, makeArrivalFn, optimumHeight, damageLevelForPsi,
 } from './blast.js';
 import { fireballRadius, fireballTime, cloudTop, cloudCapRadius } from './fireball.js';
-import { thermalRadius, thermalFluenceAt, burnDegreeAt } from './thermal.js';
+import { thermalRadius, thermalFluenceAt, burnDegreeAt, thermalPulseTmax, thermalPulsePower, thermalPulseFraction } from './thermal.js';
 import { radiationRadius, radiationDoseAt } from './radiation.js';
 import { falloutHeightFactor, falloutContours } from './fallout.js';
 
@@ -94,6 +94,11 @@ export function computeEffects(params) {
     thermalFluenceAt: (r) => thermalFluenceAt(r, W, burst, hKm),
     radiationDoseAt: (r) => radiationDoseAt(r, W, hKm),
     fireballTime: fireballTime(W),
+    // pulso térmico: potência normalizada e fração emitida em função do tempo físico (s)
+    thermalPulse: (() => {
+      const tMax = thermalPulseTmax(W);
+      return { tMax, powerAt: (t) => thermalPulsePower(t / tMax), fractionAt: (t) => thermalPulseFraction(t / tMax) };
+    })(),
     cloud: { topKm: cloudTop(W), capKm: cloudCapRadius(W) },
     fallout,
     energyJ: W * CONFIG.units.KT_TO_J,
