@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Simulador educacional dos efeitos de detonações nucleares sobre um mapa real, com prédios 3D destrutíveis. Baseado em Glasstone & Dolan (1977)." />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>Simulador de Efeitos Nucleares</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo" aria-hidden="true">☢</span>
+      <div class="brand-text">
+        <strong>Simulador de Efeitos Nucleares</strong>
+        <small>Educacional · Glasstone &amp; Dolan (1977)</small>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Seções">
+      <button data-view="sim" class="active">🗺️ <span>Simulador</span></button>
+      <button data-view="armas">🎯 <span>Armas</span></button>
+      <button data-view="oficina">🛠️ <span>Oficina</span></button>
+      <button data-view="desafios">🏁 <span>Desafios</span></button>
+      <button data-view="conquistas">🏆 <span>Conquistas</span></button>
+      <button data-view="fisica">⚛️ <span>A Física</span></button>
+      <button data-view="validacao">📏 <span>Validação</span></button>
+      <button data-view="fontes">📚 <span>Fontes</span></button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ======================= SIMULADOR ======================= -->
+    <section id="view-sim" class="view active" aria-label="Simulador">
+      <div id="map-wrap"><div id="map"></div></div>
+      <div id="flash" aria-hidden="true"></div>
+      <div id="hud" hidden aria-live="polite"></div>
+      <div id="click-hint" class="click-hint"></div>
+
+      <aside id="panel-controls" class="panel left" aria-label="Controles">
+        <div class="panel-head">
+          <h2>Controles</h2>
+          <button class="icon-btn panel-toggle" data-panel="panel-controls" aria-label="Recolher painel">⟨</button>
+        </div>
+        <div class="panel-body">
+
+          <details class="sec" open>
+            <summary>📍 Alvo</summary>
+            <form id="search-form" class="search" autocomplete="off">
+              <input id="search-input" type="search" placeholder="Buscar cidade, endereço, lugar…" aria-label="Buscar lugar" />
+              <button type="submit" class="btn">Buscar</button>
+            </form>
+            <ul id="search-results" class="search-results"></ul>
+            <div class="gz-box">
+              <div id="gz-coords" class="coords">Clique no mapa para escolher o ponto de detonação.</div>
+            </div>
+            <div class="row">
+              <span class="lbl">Clique no mapa:</span>
+              <div class="seg" role="group" aria-label="Modo do clique">
+                <button id="mode-target" class="active">🎯 Alvo</button>
+                <button id="mode-inspect">🔎 Inspecionar prédio</button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="lbl">Prédios 3D (OSM):</span>
+              <select id="bld-radius" aria-label="Raio de carregamento">
+                <option value="500">500 m</option>
+                <option value="1000">1 km</option>
+                <option value="1500" selected>1,5 km</option>
+                <option value="2000">2 km</option>
+                <option value="3000">3 km</option>
+                <option value="5000">5 km (pesado)</option>
+              </select>
+              <button id="bld-load" class="btn">Carregar</button>
+            </div>
+            <label class="check"><input id="bld-auto" type="checkbox" checked /> Carregar automaticamente ao detonar</label>
+            <div id="bld-status" class="status muted"></div>
+          </details>
+
+          <details class="sec" open id="sec-yield">
+            <summary>💣 Arma e potência</summary>
+            <div class="weapon-current"><span id="weapon-name">Little Boy (Hiroshima)</span><button id="open-arsenal" class="btn small">Escolher arma…</button></div>
+            <label class="lbl" for="yield-slider">Potência <small>(escala logarítmica: 10 t a 100 Mt)</small></label>
+            <input id="yield-slider" type="range" min="0" max="1000" step="1" />
+            <div class="row">
+              <input id="yield-number" type="number" min="0" step="any" aria-label="Potência" />
+              <select id="yield-unit" aria-label="Unidade">
+                <option value="t">t (toneladas)</option>
+                <option value="kt" selected>kt (quilotons)</option>
+                <option value="Mt">Mt (megatons)</option>
+              </select>
+            </div>
+            <div class="chips" id="yield-presets"></div>
+            <div id="yield-compare" class="compare-text"></div>
+            <div class="row">
+              <span class="lbl">Tipo (fallout):</span>
+              <select id="weapon-type">
+                <option value="fissao">Fissão (100% fissão)</option>
+                <option value="reforcada">Fissão reforçada</option>
+                <option value="termonuclear">Termonuclear (~50% fissão)</option>
+              </select>
+            </div>
+          </details>
+
+          <details class="sec" open>
+            <summary>💥 Tipo de explosão</summary>
+            <div class="radio-list" role="radiogroup">
+              <label><input type="radio" name="burst" value="surface" /> No solo <small>(mais fallout, raios menores)</small></label>
+              <label><input type="radio" name="burst" value="optimum" checked /> No ar, altura ótima <small>(maximiza 5 psi)</small></label>
+              <label><input type="radio" name="burst" value="custom" /> Altura personalizada</label>
+            </div>
+            <div class="row" id="burst-custom-row">
+              <input id="burst-height" type="number" min="0" max="50000" step="10" value="600" aria-label="Altura (m)" />
+              <span>metros</span>
+            </div>
+            <div id="burst-info" class="muted small"></div>
+          </details>
+
+          <details class="sec">
+            <summary>🌬️ Vento (fallout)</summary>
+            <div class="wind-grid">
+              <div>
+                <label class="lbl" for="wind-speed">Velocidade: <b id="wind-speed-out">24 km/h</b></label>
+                <input id="wind-speed" type="range" min="0" max="150" step="1" value="24" />
+                <label class="lbl" for="wind-dir">Vem de: <b id="wind-dir-out">270° (O)</b></label>
+                <input id="wind-dir" type="range" min="0" max="359" step="1" value="270" />
+              </div>
+              <svg id="wind-compass" viewBox="-50 -50 100 100" aria-label="Rosa dos ventos"></svg>
+            </div>
+            <button id="wind-fetch" class="btn wide">🌐 Usar vento atual (Open-Meteo)</button>
+            <div id="wind-status" class="muted small"></div>
+          </details>
+
+          <details class="sec">
+            <summary>🎬 Visual e animação</summary>
+            <div class="row"><span class="lbl">Mapa:</span><select id="basemap"></select></div>
+            <div class="row">
+              <button id="toggle-3d" class="btn">🧊 Vista 3D</button>
+              <label class="check"><input id="terrain" type="checkbox" /> Relevo 3D</label>
+            </div>
+            <div class="row"><span class="lbl">Qualidade:</span>
+              <select id="quality">
+                <option value="baixa">Baixa (celular)</option>
+                <option value="media" selected>Média</option>
+                <option value="alta">Alta</option>
+                <option value="ultra">Ultra</option>
+              </select>
+            </div>
+            <div class="row"><span class="lbl">Velocidade:</span>
+              <select id="anim-speed">
+                <option value="real">Tempo real (física)</option>
+                <option value="lento">Lenta</option>
+                <option value="normal" selected>Normal (acelerada)</option>
+                <option value="rapido">Rápida</option>
+              </select>
+            </div>
+            <label class="check"><input id="tint-damage" type="checkbox" checked /> Colorir prédios por nível de dano</label>
+            <label class="check"><input id="cinematic" type="checkbox" checked /> Câmera cinematográfica</label>
+            <label class="check"><input id="sound" type="checkbox" checked /> Som (chega com a onda de choque)</label>
+            <label class="check"><input id="reduce-flash" type="checkbox" /> Reduzir clarão (fotossensibilidade)</label>
+          </details>
+
+          <details class="sec">
+            <summary>⚖️ Comparar duas armas</summary>
+            <label class="check"><input id="compare-on" type="checkbox" /> Mostrar arma B (contornos tracejados)</label>
+            <div class="row"><span class="lbl">Arma B:</span><select id="compare-weapon"></select></div>
+            <div class="seg" role="group" aria-label="Posição da arma B">
+              <button id="compare-same" class="active">Mesmo ponto</button>
+              <button id="compare-side">Lado a lado</button>
+            </div>
+          </details>
+
+          <details class="sec">
+            <summary>👥 População (vítimas)</summary>
+            <select id="density" class="wide"></select>
+            <p class="muted small">Estimativa grosseira: densidade por tipo de área decaindo do centro. O modo automático usa a área construída dos prédios carregados (~45 m² por habitante).</p>
+          </details>
+        </div>
+        <div class="panel-actions">
+          <button id="btn-detonate" class="btn danger big">☢ DETONAR</button>
+          <button id="btn-clear" class="btn big">Limpar</button>
+        </div>
+      </aside>
+
+      <aside id="panel-results" class="panel right" aria-label="Resultados">
+        <div class="panel-head">
+          <h2>Resultados</h2>
+          <button class="icon-btn panel-toggle" data-panel="panel-results" aria-label="Recolher painel">⟩</button>
+        </div>
+        <div class="panel-body" id="results-body">
+          <div class="empty-state">
+            <p>Escolha um alvo e pressione <b>DETONAR</b> para ver os efeitos.</p>
+            <p class="muted small">Dica: carregue os prédios 3D, ative a vista 3D e veja a onda de choque derrubando a cidade em tempo (acelerado) real.</p>
+          </div>
+        </div>
+      </aside>
+
+      <div class="mobile-bar">
+        <button class="btn" data-open="panel-controls">⚙️ Controles</button>
+        <button class="btn danger" id="btn-detonate-m">☢ Detonar</button>
+        <button class="btn" data-open="panel-results">📊 Resultados</button>
+      </div>
+    </section>
+
+    <!-- ======================= PÁGINAS ======================= -->
+    <section id="view-armas" class="view page" aria-label="Escolha da arma"></section>
+    <section id="view-oficina" class="view page" aria-label="Oficina"></section>
+    <section id="view-desafios" class="view page" aria-label="Desafios"></section>
+    <section id="view-conquistas" class="view page" aria-label="Conquistas"></section>
+    <section id="view-fisica" class="view page" aria-label="A Física"></section>
+    <section id="view-validacao" class="view page" aria-label="Validação"></section>
+    <section id="view-fontes" class="view page" aria-label="Fontes"></section>
+  </main>
+
+  <footer class="disclaimer" role="note">
+    ⚠️ Ferramenta educacional. Valores aproximados baseados em literatura pública.
+  </footer>
+  <div id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "simulador-efeitos-nucleares",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simulador educacional de efeitos de detonações nucleares sobre mapa real, com prédios 3D destrutíveis.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "maplibre-gl": "4.7.1",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.11",
+    "vitest": "2.1.8"
+  }
+}
